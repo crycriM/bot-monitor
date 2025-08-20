@@ -202,7 +202,7 @@ class Processor:
 
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
         match = pd.concat([pd.Series(pos_data), pd.Series(pos_data_theo), pd.Series(quotes)], axis=1).rename(
-            columns={0: 'real', 1: 'theo', 2: 'price'})
+            columns={0: 'real', 1: 'theo', 2: 'price'}).fillna(0)
         difference_qty = match['real'] - match['theo']
         difference = difference_qty * match['price']
         match['delta_qty'] = difference_qty
@@ -211,10 +211,10 @@ class Processor:
         def very_nonzero(x, tolerance):
             return not isclose(x, 0, abs_tol=tolerance)
 
-        dust = difference[match['real'].apply(very_nonzero, tolerance=10)]
-        significant = difference[difference.apply(very_nonzero, tolerance=10)]
+        not_dust = match['real'].apply(very_nonzero, tolerance=10)
+        significant = difference.apply(very_nonzero, tolerance=10)
         match['significant'] = significant
-        match['dust'] = dust
+        match['dust'] = ~not_dust
 
         return match
 
