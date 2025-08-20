@@ -12,7 +12,7 @@ from enum import Enum
 import argparse
 import traceback
 import yaml
-from io import StringIO
+from math import isclose
 
 from datetime import datetime, timedelta
 
@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from utils_files import last_modif, read_pnl_file, read_aum_file
+from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file
 from datafeed.utils_online import NpEncoder, parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
 from web_broker import WebSpreaderBroker
@@ -111,9 +111,10 @@ class Processor:
         self.last_message_count = 0
         self.last_message = []
         self.used_accounts = {}  # key is session name, value is key=strat_name, value=account used
-        self.account_positions_theo_from_bot = {}
         self.account_theo_pos = {}
-        self.account_positions = {}
+        self.account_real_pos = {}
+        self.perimeters = {}
+        self.quotes = {}
         self._init_accounts_by_strat()
 
     def _init_accounts_by_strat(self):
@@ -143,7 +144,7 @@ class Processor:
             self.used_accounts = {}
         logging.info(f'Built account dict {self.used_accounts}')
 
-    async def update_account_multi(self):
+    def update_account_multi(self):
         """
         Update account theo, aggregated theo and real positions from bot for all sessions and strategies.
         Retrieve account positions form live file and from exchange independently
@@ -156,54 +157,111 @@ class Processor:
             # populate exchange account list for the exchange session
             if session not in account_list:
                 account_list[session] = []
+            self.perimeters[session] = set()
             for strategy_name, (trade_exchange, account) in accounts.items():
                 if (trade_exchange, account) not in account_list[session]:
                     account_list[session].append((trade_exchange, account))
 
                 # get strategy theo positions from bot (already loaded by get_summary)
                 strat_theo_pos = self.summaries[session][strategy_name]['theo']
-                strategy_positions[session] = strategy_positions.get(session, {})
+            strategy_positions[session] = strategy_positions.get(session, {})
 
             # get account positions from live file
             if session not in self.account_theo_pos:
                 self.account_theo_pos[session] = {}
+                self.account_real_pos[session] = {}
             for (trade_exchange, account) in account_list[session]:
                 key = '_'.join((trade_exchange, account))
                 logging.info(f'Getting account positions for {trade_exchange}')
                 working_directory = self.session_configs[session]['working_directory']
                 trade_account_dir = os.path.join(working_directory, key)
                 theo_pos_file = os.path.join(trade_account_dir, 'current_state_theo.pos')
+                real_pos_file = os.path.join(trade_account_dir, 'current_state.pos')
 
                 if os.path.exists(theo_pos_file):
-                    with open(theo_pos_file, 'r') as myfile:
-                        lines = myfile.readlines()
-                        pos_str = lines[-1].strip() if lines else ''
-                        try:
-                            pos_data = {}
-                            if pos_str:
-                                parts = pos_str.split(';')
-                                if len(parts) < 2:
-                                    raise ValueError("Invalid format: missing semicolon")
-                                data_str = parts[1]
-                                pairs = data_str.split(', ')
-                                for pair in pairs:
-                                    key, value = pair.split(':')
-                                    key = key.strip("'")
-                                    if key in ['equity', 'imbalance']:
-                                        continue
-                                    pos_data[key] = float(value)
-                        except Exception as e:
-                            logging.error(f'Error parsing theo pos file {theo_pos_file} for {trade_exchange}: {e}')
-                            pos_data = {}
-                        self.account_theo_pos[session][key] = pos_data
-
-                # get account positions from exchange
-                positions = await self.get_account_position(trade_exchange, account)
-
-                if session not in self.account_positions:
-                    self.account_positions[session] = {}
-                self.account_positions[session][key] = positions
+                    theo_pos_data = read_pos_file(theo_pos_file)
+                else:
+                    logging.warning(f'No theo pos file {theo_pos_file} for {session} {trade_exchange} {account}')
+                    theo_pos_data = {}
+                if os.path.exists(real_pos_file):
+                    real_pos_data = read_pos_file(real_pos_file)
+                else:
+                    logging.warning(f'No real pos file {real_pos_file} for {session} {trade_exchange} {account}')
+                    real_pos_data = {}
+                self.account_theo_pos[session][key] = theo_pos_data
+                self.account_real_pos[session][key] = real_pos_data
+                # # get account positions from exchange
+                # positions = await self.get_account_position(trade_exchange, account)
+                #
+                # if session not in self.account_positions:
+                #     self.account_positions[session] = {}
+                # self.account_positions[session][key] = positions
+                self.perimeters[session].update(set(theo_pos_data.keys()))
+                self.perimeters[session].update(set(real_pos_data.keys()))
         return
+
+    def _do_one_matching(self, pos_data, pos_data_theo, quotes):
+        match = pd.concat([pd.Series(pos_data), pd.Series(pos_data_theo), pd.Series(quotes)], axis=1).rename(
+            columns={0: 'real', 1: 'theo', 2: 'price'})
+        difference_qty = match['real'] - match['theo']
+        difference = difference_qty * match['price']
+        match['delta_qty'] = difference_qty
+        match['delta_amn'] = difference
+
+        def very_nonzero(x, tolerance):
+            return not isclose(x, 0, abs_tol=tolerance)
+
+        dust = difference[match['real'].apply(very_nonzero, tolerance=10)]
+        significant = difference[difference.apply(very_nonzero, tolerance=10)]
+        match['significant'] = significant
+        match['dust'] = dust
+
+        return match
+
+    def do_matching(self, session):
+        """
+        Perform matching of theo positions with real positions for all sessions and accounts.
+        """
+        all_pos_data = self.account_real_pos.get(session, {})
+        all_pos_data_theo = self.account_theo_pos.get(session, {})
+        quotes = self.quotes.get(session, {})
+        if session not in self.matching:
+            self.matching[session] = {}
+
+        for key, pos_data in all_pos_data.items():
+            pos_data_theo = all_pos_data_theo.get(key, {})
+            self.matching[session][key] = self._do_one_matching(pos_data, pos_data_theo, quotes)
+
+    async def fetch_quotes(self, session):
+        """
+        Fetch quotes for all pairs in the session.
+        """
+        logging.info(f'Fetching quotes for session {session}')
+        exchange_name = session
+        account = ''
+        params = {
+            'exchange_trade': exchange_name,
+            'account_trade': account
+        }
+        quotes = {}
+        end_point = BrokerHandler.build_end_point(exchange_name)
+        bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
+                           logger_name='default')
+        for coin in self.perimeters[session]:
+            ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
+            symbol, _ = bh.symbol_to_market_with_factor(coin, universal=False)
+            last = await end_point._exchange_async.fetch_ticker(ticker)
+            if 'last' in last:
+                price = last['last']
+            else:
+                price = None
+            quotes[symbol] = price
+
+        await end_point._exchange_async.close()
+        await bh.close_exchange_async()
+        logging.info(f'Quotes ready for session {session}')
+
+        self.quotes[session] = quotes
 
     async def update_config(self, session, config_file):
         if os.path.exists(config_file):
@@ -223,15 +281,16 @@ class Processor:
         now = today_utc()
         accounts = self.used_accounts[session]
         working_directory = self.session_configs[session]['working_directory']
-        days = [2, 7, 30, 90, 180]
+        days = [1, 2, 7, 30, 90, 180]
         last_date = {day: now - timedelta(days=day) for day in days}
         real_pnl_dict = {}
         account_list = []
-        for strategy_name, (trade_exchange, account) in accounts.items():
-            if (trade_exchange, account) not in account_list:
-                account_list.append((trade_exchange, account))
+        for strategy_name, (trade_exchange, account_number) in accounts.items():
+            if (trade_exchange, account_number) not in account_list:
+                account_list.append((trade_exchange, account_number))
         for account in account_list:
-            aum_file = os.path.join(working_directory, '_'.join(account), 'aum.csv')
+            account_key = '_'.join(account)
+            aum_file = os.path.join(working_directory, account_key, '_aum.csv')
             if os.path.exists(aum_file):
                 try:
                     aum = await read_aum_file(aum_file, session)
@@ -249,7 +308,8 @@ class Processor:
                     aum.set_index('date', inplace=True)  # copie
                     aum = aum.loc[~aum.index.duplicated(keep='last')]
                     daily = aum['perf'].resample('1d').agg('sum').fillna(0)
-                    is_live = daily.loc[daily.index > last_date[days[0]]].std() > 0
+                    hourly = aum['perf'].resample('1H').agg('sum').fillna(0)
+                    is_live = hourly.loc[hourly.index > last_date[days[0]]].std() > 0
                     if is_live:
                         logging.info(f'session {session} account {account} is live')
                         real_pnl_dict.update({'vol': {},
@@ -262,7 +322,7 @@ class Processor:
                     is_live = False
                     aum = pd.DataFrame()
                     daily = pd.Series()
-                    logging.error(f'Error in aum file {aum_file} for strat {strategy_name}')
+                    logging.error(f'Error in aum file {aum_file} for account {account_key}')
 
                 if is_live:
                     for day in days:
@@ -363,6 +423,9 @@ class Processor:
                             with open(filename, 'w') as f:
                                 f.write(html)
                             plt.close()
+                    if session not in self.aum:
+                        self.aum[session] = {}
+                    self.aum[session][account_key] = real_pnl_dict
 
     async def update_pnl(self, session, working_directory, strategy_name, strategy_param):
         logging.info('updating pnl for %s, %s', session, strategy_name)
@@ -370,7 +433,7 @@ class Processor:
         strategy_directory = os.path.join(working_directory, strategy_name)
         pnl_file = os.path.join(strategy_directory, 'pnl.csv')
 
-        days = [2, 7, 30, 90, 180]
+        days = [1, 2, 7, 30, 90, 180]
         last_date = {day: now - timedelta(days=day) for day in days}
         pnl_dict = {}
 
@@ -667,7 +730,17 @@ class Processor:
 
         return message
 
-    async def refresh(self):
+    async def refresh_quotes(self):
+        tasks = []
+        logging.info('refreshing quotes')
+        for session in self.perimeters:
+            if session not in self.quotes:
+                self.quotes[session] = {}
+                tasks.append(asyncio.create_task(self.fetch_quotes(session)))
+        await asyncio.gather(*tasks)
+        return
+
+    async def refresh(self, with_matching=True):
         logging.info('refreshing')
 
         for session, params in self.session_configs.items():
@@ -689,7 +762,13 @@ class Processor:
             except Exception as e:
                 logging.error(f'exception {e.args[0]} for {session}/{strategy_name}')
                 logging.error(traceback.format_exc())
-        await self.update_account_multi()
+        self.update_account_multi()
+
+        if with_matching:
+            for session in self.session_configs:
+                self.do_matching(session)
+        return
+
 
     def get_status(self):
         return self.summaries
@@ -700,15 +779,18 @@ class Processor:
     def get_pnl(self):
         return self.pnl
 
-    def get_matching(self, session, strat):
+    def get_aum(self):
+        return self.aum
+
+    def get_matching(self, session, account_key):
         if session not in self.processor_config:
-            return f'Exchange not found: try {list(self.processor_config.keys())} and strat name'
+                return f'Exchange not found: try {list(self.processor_config.keys())} and account key'
         if self.matching is None:
-            return
-        if session in self.matching and strat in self.matching[session]:
-            return self.matching[session][strat]
+            return {}
+        if session in self.matching and account_key in self.matching[session]:
+            return self.matching[session][account_key]
         else:
-            return None
+            return {}
 
     async def get_account_position(self, exchange, account):
         if 'ok' in exchange:
@@ -874,13 +956,18 @@ def runner(event, processor, pace):
             report = processor.get_pnl()
             return JSONResponse(report)
 
+        @app.get('/aum')
+        async def read_aum():
+            report = processor.get_aum()
+            return JSONResponse(report)
+
         @app.get('/matching')
-        async def read_matching(session: str = 'bin', strat: str = 'pairs1_melanion'):
-            report = processor.get_matching(session, strat)
+        async def read_matching(session: str = 'binance', key: str = 'bitget_2'):
+            report = processor.get_matching(session, key)
             if isinstance(report, pd.DataFrame):
                 return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
                                                                'theo': lambda x: f'{x:.0f}',
-                                                               'current': lambda x: f'{x:.0f}',
+                                                               'real': lambda x: f'{x:.0f}',
                                                                }))
             else:
                 if report is not None:
@@ -907,8 +994,11 @@ def runner(event, processor, pace):
                     last_mod_times[session] = current_mod_time
                     await queue.put((SignalType.FILE, session, file_path))
 
-    async def refresh():
-        await processor.refresh()
+    async def refresh(with_matching):
+        await processor.refresh(with_matching)
+
+    async def refresh_quotes():
+        await processor.refresh_quotes()
 
     async def send_alert(message):
         for error in message:
@@ -924,7 +1014,9 @@ def runner(event, processor, pace):
         event.loop = asyncio.get_event_loop()
         event.queue = asyncio.Queue()
         task_queue = asyncio.Queue()
-        await refresh()
+        await refresh(with_matching=False)  # first we initialize perimeters
+        await refresh_quotes()
+        await refresh(with_matching=True)  # then we can match
         event.set()
         web_runner = asyncio.create_task(run_web_processor())
         # heart_runner = asyncio.create_task(heartbeat(task_queue, pace['REFRESH'],SignalType.REFRESH))
