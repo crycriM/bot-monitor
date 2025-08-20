@@ -36,7 +36,7 @@ async def read_aum_file(aum_file, exchange):
     try:
         async with aiofiles.open(aum_file, 'r') as myfile:
             content = await myfile.read()
-        df = pd.read_csv(StringIO(content), sep=';', header=None, converters={0:date_parser})
+        df = pd.read_csv(StringIO(content), sep=';', header=[0], converters={0:date_parser})
         if df.shape[1] == 2:
             df.columns = ['date', 'aum']
         elif df.shape[1] == 4:
@@ -50,3 +50,29 @@ async def read_aum_file(aum_file, exchange):
         df = pd.DataFrame()
 
     return df
+
+def read_pos_file(pos_filename):
+    """
+    Reads theo or real position file and extracts the latest position data.
+    """
+    with open(pos_filename, 'r') as myfile:
+        lines = myfile.readlines()
+        pos_str = lines[-1].strip() if lines else ''
+        try:
+            pos_data = {}
+            if pos_str:
+                parts = pos_str.split(';')
+                if len(parts) < 2:
+                    raise ValueError("Invalid format: missing semicolon")
+                data_str = parts[1]
+                pairs = data_str.split(', ')
+                for pair in pairs:
+                    key, value = pair.split(':')
+                    key = key.strip("'")
+                    if key in ['equity', 'imbalance']:
+                        continue
+                    pos_data[key] = float(value)
+        except Exception as e:
+            raise FileNotFoundError(f'Error parsing theo pos file {pos_filename}: {e}')
+
+    return pos_data
