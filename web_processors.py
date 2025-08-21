@@ -42,12 +42,9 @@ global app
 
 SignalType = Enum('SignalType', [('STOP', 'stop'),
                                  ('REFRESH', 'refresh'),
-                                 ('PNL', 'check_pnl'),
-                                 ('POS', 'check_pos'),
+                                 ('MATCHING', 'check_matching'),
                                  ('RUNNING', 'check_running'),
                                  ('FILE', 'update_file'),
-                                 ('MULTI', 'update_account_multi'),
-                                 ('MULTI_POS', 'check_multistrategy_position'),
                                  ('PRICE_UPDATE', 'update_prices')])
 
 """
@@ -106,7 +103,6 @@ class Processor:
         self.summaries = {}
         self.pnl = {}
         self.matching = {}
-        self.multistrategy_matching = {}
         self.dashboard = {}
         self.last_message_count = 0
         self.last_message = []
@@ -212,8 +208,8 @@ class Processor:
             return not isclose(x, 0, abs_tol=tolerance)
 
         not_dust = match['real'].apply(very_nonzero, tolerance=10)
-        significant = difference.apply(very_nonzero, tolerance=10)
-        match['significant'] = significant
+        is_mismatch = difference.apply(very_nonzero, tolerance=10)
+        match['is_mismatch'] = is_mismatch
         match['dust'] = ~not_dust
 
         return match
@@ -221,6 +217,7 @@ class Processor:
     def do_matching(self, session):
         """
         Perform matching of theo positions with real positions for all sessions and accounts.
+        Each session account matching DataFrame has columns ['real', 'theo', 'price', 'delta_qty', 'delta_amn', 'significant', 'dust'].
         """
         all_pos_data = self.account_real_pos.get(session, {})
         all_pos_data_theo = self.account_theo_pos.get(session, {})
@@ -681,28 +678,16 @@ class Processor:
                         message += [f'2day PnL < -5% for {strategy_name}@{session}']
         return message
 
-    async def check_pos(self):
+    async def check_matching(self):
         message = []
 
-        for session, accounts in self.matching.items():
-            for strat, matching in accounts.items():
-                logging.info(f'checking {session}:{strat}')
+        for session, matching_dict in self.matching.items():
+            for account, matching in matching_dict.items():
+                logging.info(f'checking {session}:{account}')
                 try:
-                    significant_factor = 0.2
-                    total_factor = 1
-                    theo_pose = matching['theo'].drop(['Total', 'USDT total', 'nLong', 'nShort'])
-                    seuil_theo = theo_pose.apply(np.abs).median()
-                    significant_theo = theo_pose[theo_pose.apply(np.abs) > (seuil_theo * significant_factor)].index
-                    current_pose = matching['current'].drop(['Total', 'USDT total', 'nLong', 'nShort'])
-                    current_pose = current_pose[current_pose.apply(np.abs) > 100]
-                    seuil_current = current_pose.apply(np.abs).median()
-                    significant_current = current_pose[current_pose.apply(np.abs) > (seuil_current * significant_factor)].index
-                    significant_theo = set(significant_theo)
-                    significant_current = set(significant_current)
+                    # keep non dust
 
-                    # checking theo positions
-                    n_long = theo_pose[(theo_pose.apply(np.abs) > (significant_factor * seuil_theo)) & (theo_pose > 0)].count()
-                    n_short = theo_pose[(theo_pose.apply(np.abs) > (significant_factor * seuil_theo)) & (theo_pose < 0)].count()
+
 
                     if n_short != n_long and 'spot' not in session:
                         message += [f'{strat}@{session}: Theo pos imbalance']
@@ -755,12 +740,12 @@ class Processor:
                         await self.update_summary(session, working_directory, strategy_name, strategy_param)
                         await self.update_pnl(session, working_directory, strategy_name, strategy_param)
                     except Exception as e:
-                        logging.error(f'exception {e.args[0]} for {session}/{strategy_name}')
+                        logging.error(f'exception {e.args[0]} for {session}/{strategy_name} in refresh')
                         logging.error(traceback.format_exc())
             try:
                 await self.update_aum(session)
             except Exception as e:
-                logging.error(f'exception {e.args[0]} for {session}/{strategy_name}')
+                logging.error(f'exception {e.args[0]} for {session} in update_aum')
                 logging.error(traceback.format_exc())
         self.update_account_multi()
 
@@ -964,16 +949,16 @@ def runner(event, processor, pace):
         @app.get('/matching')
         async def read_matching(session: str = 'binance', key: str = 'bitget_2'):
             report = processor.get_matching(session, key)
-            if isinstance(report, pd.DataFrame):
-                return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
-                                                               'theo': lambda x: f'{x:.0f}',
-                                                               'real': lambda x: f'{x:.0f}',
-                                                               }))
-            else:
-                if report is not None:
-                    return HTMLResponse(report)
-                else:
-                    return HTMLResponse('N/A')
+            return JSONResponse(report.to_dict(orient='index'))
+            # if isinstance(report, pd.DataFrame):
+            #     return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
+            #                                                    'theo': lambda x: f'{x:.0f}',
+            #                                                    'real': lambda x: f'{x:.0f}',
+            #                                                    }))
+            # else:
+            #     if report is not None:
+            #     else:
+            #         return HTMLResponse('N/A')
 
         config = uvicorn.Config(app, port=14440, host='0.0.0.0', lifespan='on')
         server = uvicorn.Server(config)
@@ -981,8 +966,8 @@ def runner(event, processor, pace):
 
     async def heartbeat(queue, pace, action):
         while True:
-            await asyncio.sleep(pace)
             await queue.put(action)
+            await asyncio.sleep(pace)
 
     async def watch_file_modifications(queue):
         last_mod_times = {session: os.path.getmtime(file_path) for session, file_path in processor.config_files.items()}
@@ -1016,14 +1001,13 @@ def runner(event, processor, pace):
         task_queue = asyncio.Queue()
         await refresh(with_matching=False)  # first we initialize perimeters
         await refresh_quotes()
-        await refresh(with_matching=True)  # then we can match
         event.set()
         web_runner = asyncio.create_task(run_web_processor())
-        # heart_runner = asyncio.create_task(heartbeat(task_queue, pace['REFRESH'],SignalType.REFRESH))
-        # pnl_runner = asyncio.create_task(heartbeat(task_queue, pace['PNL'], SignalType.PNL))
-        # pos_runner = asyncio.create_task(heartbeat(task_queue, pace['POS'], SignalType.POS))
-        # running_runner = asyncio.create_task(heartbeat(task_queue, pace['RUNNING'], SignalType.RUNNING))
-        # file_watcher = asyncio.create_task(watch_file_modifications(task_queue))
+        heart_runner = asyncio.create_task(heartbeat(task_queue, pace['REFRESH'], SignalType.REFRESH))
+        match_runner = asyncio.create_task(heartbeat(task_queue, pace['MATCHING'], SignalType.MATCHING))
+        quote_runner = asyncio.create_task(heartbeat(task_queue, pace['PRICE_UPDATE'], SignalType.PRICE_UPDATE))
+        running_runner = asyncio.create_task(heartbeat(task_queue, pace['RUNNING'], SignalType.RUNNING))
+        file_watcher = asyncio.create_task(watch_file_modifications(task_queue))
 
         while True:
             item = await task_queue.get()
@@ -1031,13 +1015,13 @@ def runner(event, processor, pace):
                 task_queue.task_done()
                 break
             if item == SignalType.REFRESH:
-                task = asyncio.create_task(refresh())
+                task = asyncio.create_task(refresh(with_matching=True))
                 task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.PNL:
-                task = asyncio.create_task(check(processor.check_pnl()))
+            elif item == SignalType.MATCHING:
+                task = asyncio.create_task(check(processor.check_matching()))
                 task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.POS:
-                task = asyncio.create_task(check(processor.check_pos()))
+            elif item == SignalType.PRICE_UPDATE:
+                task = asyncio.create_task(check(processor.refresh_quotes()))
                 task.add_done_callback(lambda _: task_queue.task_done())
             elif item == SignalType.RUNNING:
                 task = asyncio.create_task(check(processor.check_running()))
@@ -1047,8 +1031,8 @@ def runner(event, processor, pace):
                 task_queue.task_done()
         web_runner.cancel()
         heart_runner.cancel()
-        pnl_runner.cancel()
-        pos_runner.cancel()
+        match_runner.cancel()
+        quote_runner.cancel()
         running_runner.cancel()
         file_watcher.cancel()
         await task_queue.join()
@@ -1071,7 +1055,7 @@ if __name__ == '__main__':
     else:
         config = {}
 
-    pace = config.get('pace', {'REFRESH': 180, 'PNL': 1800, 'POS': 600, 'RUNNING': 300})
+    pace = config.get('pace', {'REFRESH': 180, 'MATCHING': 60, 'PRICE_UPDATE': 600, 'RUNNING': 300})
     started = threading.Event()
     processor = Processor(config)
     th = threading.Thread(target=runner, args=(started, processor, pace,))
