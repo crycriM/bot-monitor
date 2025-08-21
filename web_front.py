@@ -24,14 +24,6 @@ def get_any(upi, params):
     response = requests.get(upi, params=params)
     return response
 
-def is_multi(strat_param):
-    """
-    Check if the strategy parameter indicates a multi strategy.
-    :param strat_param: Dictionary containing strategy parameters.
-    :return: True if it is a multi strategy, False otherwise.
-    """
-    return 'multi' in strat_param and strat_param['multi'] == 'yes'
-
 def dict_to_df(data_dict, mode=True):
     try:
         if mode:
@@ -59,12 +51,15 @@ def multistrategy_matching_to_df(details_dict):
         main_df = pd.DataFrame.from_dict(details_dict, orient='index')
         main_df.reset_index(inplace=True)
         main_df.rename(columns={'index': 'token'}, inplace=True)
-        main_df = main_df[['token', 'theo_qty', 'real_qty', 'theo_amount', 'real_amount', 'ref_price', 'executing', 'matching', 'strategy_count', 'is_dust', 'is_mismatch','mismatch_duration']]
-        main_df['theo_amount'] = main_df['theo_amount'].fillna(0).astype(int)
-        main_df['real_amount'] = main_df['real_amount'].fillna(0).astype(int)
-        main_df['ref_price'] = main_df['ref_price'].fillna(0.0)
-        main_df['strategy_count'] = main_df['strategy_count'].fillna(0).astype(int)
-        main_df['is_dust'] = main_df['is_dust'].fillna(False)
+        main_df = main_df[['token', 'theo', 'real', 'price', 'dust', 'is_mismatch']]
+
+        main_df['ref_price'] = main_df['price'].fillna(0.0)
+        main_df['theo_qty'] = main_df['theo'].fillna(0)
+        main_df['theo_amount'] = (main_df['theo_qty'] * main_df['ref_price']).astype(int)
+        main_df['real_qty'] = main_df['real'].fillna(0)
+        main_df['real_amount'] = (main_df['real_qty'] * main_df['ref_price']).astype(int)
+        main_df['strategy_count'] = 0#main_df['strategy_count'].fillna(0).astype(int)
+        main_df['is_dust'] = main_df['dust'].fillna(False)
         main_df['is_mismatch'] = main_df['is_mismatch'].fillna(False)
 
         # Create summary DataFrame (includes all positions, even dust)
@@ -75,7 +70,7 @@ def multistrategy_matching_to_df(details_dict):
 
         # Filter out dust positions from main DataFrame
         main_df = main_df[~main_df['is_dust']]
-        main_df = main_df[['token','theo_amount', 'real_amount', 'executing', 'matching', 'strategy_count','mismatch_duration']]
+        main_df = main_df[['token','theo_amount', 'real_amount', 'is_mismatch']]
 
         return main_df, summary_df
     except Exception as e:
@@ -146,37 +141,37 @@ def set_req(account):
     # if response.ok:
     #     clear('liquidate_rez')
     #     with use_scope('liquidate_rez'):
-    #         put_html(response.content.decode())
-
-def matching_req(account):
-    exchange, strat = account.split(':')
-    params = {'exchange': exchange, 'strat': strat}
-    uri = GATEWAY + '/matching'
-    response = get_any(uri, params)
-    if response.ok:
-        clear('matching_rez')
-        with use_scope('matching_rez'):
-            put_html('<div class="metrics-container">')
-            put_html(response.content.decode())
-            put_html('</div>')
-            figname = f'temp/{exchange}_{strat}_fig1.html'
-            if os.path.exists(figname):
-                with open(figname, 'r') as figfile:
-                    figure = figfile.read()
-                    put_html(figure)
-            figname = f'temp/{exchange}_{strat}_fig2.html'
-            if os.path.exists(figname):
-                with open(figname, 'r') as figfile:
-                    figure = figfile.read()
-                    put_html(figure)
-            figname = f'temp/{exchange}_{strat}_fig3.html'
-            if os.path.exists(figname):
-                with open(figname, 'r') as figfile:
-                    figure = figfile.read()
-                    put_html(figure)
-    else:
-        with use_scope('matching_rez'):
-            put_text(f"Error: Matching endpoint returned status {response.status_code}: {response.text}")
+#     #         put_html(response.content.decode())
+#
+# def matching_req(account):
+#     exchange, strat = account.split(':')
+#     params = {'exchange': exchange, 'strat': strat}
+#     uri = GATEWAY + '/matching'
+#     response = get_any(uri, params)
+#     if response.ok:
+#         clear('matching_rez')
+#         with use_scope('matching_rez'):
+#             put_html('<div class="metrics-container">')
+#             put_html(response.content.decode())
+#             put_html('</div>')
+#             figname = f'temp/{exchange}_{strat}_fig1.html'
+#             if os.path.exists(figname):
+#                 with open(figname, 'r') as figfile:
+#                     figure = figfile.read()
+#                     put_html(figure)
+#             figname = f'temp/{exchange}_{strat}_fig2.html'
+#             if os.path.exists(figname):
+#                 with open(figname, 'r') as figfile:
+#                     figure = figfile.read()
+#                     put_html(figure)
+#             figname = f'temp/{exchange}_{strat}_fig3.html'
+#             if os.path.exists(figname):
+#                 with open(figname, 'r') as figfile:
+#                     figure = figfile.read()
+#                     put_html(figure)
+#     else:
+#         with use_scope('matching_rez'):
+#             put_text(f"Error: Matching endpoint returned status {response.status_code}: {response.text}")
 
 def pnl_req():
     uri = GATEWAY + '/pnl'
@@ -196,28 +191,25 @@ def pnl_req():
             put_text(f"Error: PnL endpoint returned status {response.status_code}: {response.text}")
 
 def multistrategy_matching_req(account):
-    exchange, account = account.split(':')
-    session_name = exchange.replace('_fut', '')
+    session, account = account.split(':')
     account_key = f"{account}"
     
     # Fetch multistrategy position details
-    uri_details = GATEWAY + '/multistrategy_position_details'
-    params_details = {'session': session_name, 'account_key': account_key}
+    uri_details = GATEWAY + '/matching'
+    params_details = {'session': session, 'account_key': account_key}
     response_details = get_any(uri_details, params=params_details)
-    print(f"Position details response status: {response_details.status_code}")
-    
-    clear('multistrategy_matching_rez')
+
+    clear('matching')
     details_dict = {}
     if response_details.ok:
         try:
             details_dict = json.loads(response_details.content.decode())
         except Exception as e:
-            print(f"JSON parse error for details: {e}")
-            with use_scope('multistrategy_matching_rez'):
+            with use_scope('matching'):
                 put_text(f"Error: Failed to parse position details: {response_details.text}")
             return
     else:
-        with use_scope('multistrategy_matching_rez'):
+        with use_scope('matching'):
             put_text(f"Error: Position details endpoint returned status {response_details.status_code}: {response_details.text}")
         return
 
@@ -226,7 +218,7 @@ def multistrategy_matching_req(account):
 
     # Log the number of dust positions filtered
     dust_count = len(details_dict) - len(main_df)
-    print(f"Filtered {dust_count} dust positions for {session_name}:{account_key}")
+    print(f"Filtered {dust_count} dust positions for {session}:{account_key}")
     
     # Custom formatter for ref_price: 2 decimals if >= 1, 3 significant figures if < 1
     def format_ref_price(x):
@@ -237,7 +229,7 @@ def multistrategy_matching_req(account):
         else:
             return f'{x:.3g}'
     
-    with use_scope('multistrategy_matching_rez'):
+    with use_scope('matching'):
         put_html('<div class="metrics-container">')
         # Display summary DataFrame
         put_html(summary_df.to_html(
@@ -254,11 +246,11 @@ def multistrategy_matching_req(account):
             formatters={
                 'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
                 'real_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
-                'ref_price': format_ref_price,
-                'strategy_count': lambda x: f'{x:d}',
-                'is_dust': lambda x: str(x),
+                'price': format_ref_price,
+                # 'strategy_count': lambda x: f'{x:d}',
+                'dust': lambda x: str(x),
                 'is_mismatch': lambda x: str(x),
-                'mismatch_duration': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
+                # 'mismatch_duration': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
             },
             classes='card',
             index=False
@@ -308,53 +300,57 @@ def main():
         put_tabs([
             {'title': 'PnL', 'content': put_scope('pnl')},
             {'title': 'matching', 'content': put_scope('matching')},
-            {'title': 'status', 'content': put_scope('status')},
+            # {'title': 'status', 'content': put_scope('status')},
             {'title': 'multiply', 'content': put_scope('multiply')},
-            {'title': 'adjust', 'content': put_scope('adjust')},
-            {'title': 'Multistrategy Matching', 'content': put_scope('multistrategy_matching')}
+            # {'title': 'adjust', 'content': put_scope('adjust')}
         ])]
     )
 
-    account_dict = {}
-    multi_account_dict = {}
+    session_configs = {}
+    used_accounts = {}
 
-    for exchange, config_file in config_files.items():
-        if exchange not in account_dict:
-            account_dict[exchange] = set()
-            multi_account_dict[exchange] = set()
+    # load all config files and extract active strategies
+    for session, config_file in config_files.items():
         if os.path.exists(config_file):
             with open(config_file, 'r') as myfile:
-                strat_params = json.load(myfile)
-                for strat, strat_param in strat_params['strategy'].items():
-                    if strat_param['active'] and strat_param['send_orders'] != 'dummy':
-                        account_key = f"{strat_param['exchange_trade']}_{strat_param['account_trade']}"
-                        account_dict[exchange].add(account_key)
-                        multi_account_dict[exchange].add(account_key)
-                        account_dict[exchange].add(strat_param['account_trade'])
-                with use_scope('multiply'):
-                    exchange_label = exchange
-                    if 'bin' in exchange and 'spot' not in exchange:
-                        exchange_label = 'bin_fut'
-                    elif 'bitget' in exchange:
-                        exchange_label = 'bitget_fut'
-                    put_buttons([exchange_label + ':' + str(account) for account in account_dict[exchange]], onclick=multiply_req)
-                with use_scope('matching'):
-                    put_buttons([exchange + ':' + str(strat) for strat, strat_param in strat_params['strategy'].items() if
-                                 strat_param['active']], onclick=matching_req)
-                with use_scope('status'):
-                    put_buttons([exchange + ':' + str(strat) for strat, strat_param in strat_params['strategy'].items() if
-                                 strat_param['active']], onclick=status_req)
-                with use_scope('adjust'):
-                    exchange_label = exchange
-                    if 'bin' in exchange and 'spot' not in exchange:
-                        exchange_label = 'bin_fut'
-                    elif 'bitget' in exchange:
-                        exchange_label = 'bitget_fut'
-                    put_buttons([exchange_label + ':' + str(account) for account in account_dict[exchange]], onclick=set_req)
-                with use_scope('multistrategy_matching'):
-                    exchange_label = exchange
-                    put_buttons([exchange_label + ':' + str(account) for account in multi_account_dict[exchange]],
-                                onclick=multistrategy_matching_req)
+                params = json.load(myfile)
+                session_configs[session] = params
+
+    # populate accounts
+    for session, session_params in session_configs.items():
+        strategies = session_params['strategy']
+
+        for strategy_name, strategy_param in strategies.items():
+            strat_account = strategy_param['account_trade']
+            strat_exchange = strategy_param.get('exchange_trade', '')
+            active = strategy_param.get('active', False)
+            destination = strategy_param.get('send_orders', 'dummy')
+
+            if not active or destination == 'dummy':
+                continue
+            if session not in used_accounts:
+                used_accounts[session] = set()
+            used_accounts[session].add((strat_exchange, strat_account))
+
+    for session, accounts in used_accounts.items():
+        with use_scope('multiply'):
+            put_buttons([session + ':' + '_'.join(account) for account in accounts], onclick=multiply_req)
+        with use_scope('matching'):
+            put_buttons([session + ':' + '_'.join(account) for account in accounts], onclick=multistrategy_matching_req)
+        # with use_scope('status'):
+        #     put_buttons([session + ':' + str(strat) for strat, strat_param in strat_params['strategy'].items() if
+        #                  strat_param['active']], onclick=status_req)
+        # with use_scope('adjust'):
+        #     exchange_label = exchange
+        #     if 'bin' in session and 'spot' not in exchange:
+        #         exchange_label = 'bin_fut'
+        #     elif 'bitget' in exchange:
+        #         exchange_label = 'bitget_fut'
+        #     put_buttons([exchange_label + ':' + str(account) for account in account_dict[exchange]], onclick=set_req)
+        # with use_scope('multistrategy_matching'):
+        #     exchange_label = exchange
+        #     put_buttons([exchangesession + ':' + str(account) for account in multi_account_dict[exchange]],
+        #                 onclick=multistrategy_matching_req)
 
     with use_scope('multiply'):
         put_scope('multiply_req')
@@ -363,12 +359,10 @@ def main():
     with use_scope('pnl'):
         put_button('Get PnL', onclick=pnl_req)
         put_scope('pnl_rez')
-    with use_scope('status'):
-        put_scope('status_rez')
-    with use_scope('adjust'):
-        put_scope('adjust_req')
-    with use_scope('multistrategy_matching'):
-        put_scope('multistrategy_matching_rez')
+    # with use_scope('adjust'):
+    #     put_scope('adjust_req')
+    # with use_scope('multistrategy_matching'):
+    #     put_scope('multistrategy_matching_rez')
 
 if __name__ == '__main__':
     global CONFIG
