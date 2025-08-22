@@ -203,11 +203,12 @@ class Processor:
         difference = difference_qty * match['price']
         match['delta_qty'] = difference_qty
         match['delta_amn'] = difference
+        real_amnt = match['real'] * match['price']
 
         def very_nonzero(x, tolerance):
             return not isclose(x, 0, abs_tol=tolerance)
 
-        not_dust = match['real'].apply(very_nonzero, tolerance=10)
+        not_dust = real_amnt.apply(very_nonzero, tolerance=10)
         is_mismatch = difference.apply(very_nonzero, tolerance=10)
         match['is_mismatch'] = is_mismatch
         match['dust'] = ~not_dust
@@ -358,15 +359,15 @@ class Processor:
                             real_pnl_dict['apr'].update({f'{day:03d}d': 0})
                             real_pnl_dict['perfcum'].update({f'{day:03d}d': 0})
                             real_pnl_dict['drawdawn'].update({f'{day:03d}d': 0})
-                            logging.error(f'Error in aum data for strat {strategy_name} for day {day}')
+                            logging.error(f'Error in aum data for strat {account_key} for day {day}')
 
                         if day == 180:
-                            logging.info(f'Generating graph for {strategy_name}')
+                            logging.info(f'Generating graph for {session}-{account_key}')
                             fig, ax = plt.subplots()
                             ax.plot(perfcum.index, perfcum.values)
                             ax.set_xlabel('date')
                             ax.set_ylabel('Cum perf')
-                            ax.set_title(f'{session}-{strategy_name}')
+                            ax.set_title(f'{session}-{account_key}')
                             ax.grid()
                             for tick in ax.get_xticklabels():
                                 tick.set_rotation(45)
@@ -375,7 +376,7 @@ class Processor:
                             fig.savefig(tmpfile, format='png')
                             encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                             html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                            filename = f'temp/{session}_{strategy_name}_fig1.html'
+                            filename = f'temp/{session}_{account_key}_fig1.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
@@ -386,7 +387,7 @@ class Processor:
                             ax.plot(pnlcum.index, pnlcum.values)
                             ax.set_xlabel('date')
                             ax.set_ylabel('Cum pnl')
-                            ax.set_title(f'{session}-{strategy_name}')
+                            ax.set_title(f'{session}-{account_key}')
                             ax.grid()
                             for tick in ax.get_xticklabels():
                                 tick.set_rotation(45)
@@ -395,7 +396,7 @@ class Processor:
                             fig.savefig(tmpfile, format='png')
                             encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                             html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                            filename = f'temp/{session}_{strategy_name}_fig2.html'
+                            filename = f'temp/{session}_{account_key}_fig2.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
@@ -407,7 +408,7 @@ class Processor:
                             ax.bar(x=daily.index, height=daily.values, color=daily.apply(lambda x:'red' if x<0 else 'green'))
                             ax.set_xlabel('date')
                             ax.set_ylabel('Daily perf')
-                            ax.set_title(f'{session}-{strategy_name}')
+                            ax.set_title(f'{session}-{account_key}')
                             ax.grid()
                             for tick in ax.get_xticklabels():
                                 tick.set_rotation(45)
@@ -415,7 +416,7 @@ class Processor:
                             fig.savefig(tmpfile, format='png')
                             encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                             html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                            filename = f'temp/{session}_{strategy_name}_fig3.html'
+                            filename = f'temp/{session}_{account_key}_fig3.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)

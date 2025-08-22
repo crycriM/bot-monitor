@@ -68,9 +68,7 @@ def multistrategy_matching_to_df(details_dict):
             'Gross Exposure': [int(main_df['theo_amount'].abs().sum()), int(main_df['real_amount'].abs().sum())]
         }, index=['Theo', 'Real'])
 
-        # Filter out dust positions from main DataFrame
-        main_df = main_df[~main_df['is_dust']]
-        main_df = main_df[['token','theo_amount', 'real_amount', 'is_mismatch']]
+        main_df = main_df[['token','theo_amount', 'real_amount', 'is_mismatch', 'is_dust']]
 
         return main_df, summary_df
     except Exception as e:
@@ -199,17 +197,17 @@ def multistrategy_matching_req(account):
     params_details = {'session': session, 'account_key': account_key}
     response_details = get_any(uri_details, params=params_details)
 
-    clear('matching')
+    clear('matching_rez')
     details_dict = {}
     if response_details.ok:
         try:
             details_dict = json.loads(response_details.content.decode())
         except Exception as e:
-            with use_scope('matching'):
+            with use_scope('matching_rez'):
                 put_text(f"Error: Failed to parse position details: {response_details.text}")
             return
     else:
-        with use_scope('matching'):
+        with use_scope('matching_rez'):
             put_text(f"Error: Position details endpoint returned status {response_details.status_code}: {response_details.text}")
         return
 
@@ -229,7 +227,7 @@ def multistrategy_matching_req(account):
         else:
             return f'{x:.3g}'
     
-    with use_scope('matching'):
+    with use_scope('matching_rez'):
         put_html('<div class="metrics-container">')
         # Display summary DataFrame
         put_html(summary_df.to_html(
@@ -238,11 +236,14 @@ def multistrategy_matching_req(account):
                 'Gross Exposure': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
             },
             classes='card',
-            index=False
+            index=True
         ))
         put_html('<br>')  # Add spacing between summary and main table
-        # Display main table (dust positions already excluded)
-        put_html(main_df.to_html(
+        # Display main table
+        meaningful = main_df[~(main_df['is_dust'] | main_df['is_mismatch'])][['token', 'theo_amount', 'real_amount']]
+        dust = main_df[main_df['is_dust']][['token', 'real_amount']]
+        mismatch = main_df[main_df['is_mismatch']][['token', 'theo_amount', 'real_amount']]
+        put_html(meaningful.to_html(
             formatters={
                 'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
                 'real_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
@@ -255,7 +256,43 @@ def multistrategy_matching_req(account):
             classes='card',
             index=False
         ))
+        put_html('<br>')  # Add spacing between summary and main table
+        put_text('Mismatched positions')
+        put_html(mismatch.to_html(
+            formatters={
+                'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
+                'real_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
+            },
+            classes='card',
+            index=False
+        ))
+        put_html('<br>')  # Add spacing between summary and main table
+        put_text('Dust')
+        put_html(dust.to_html(
+            formatters={
+                'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
+            },
+            classes='card',
+            index=False
+        ))
         put_html('</div>')
+
+        prefix = f'{session}_{account_key}'
+        figname = f'temp/{prefix}_fig1.html'
+        if os.path.exists(figname):
+            with open(figname, 'r') as figfile:
+                figure = figfile.read()
+                put_html(figure)
+        figname = f'temp/{prefix}_fig2.html'
+        if os.path.exists(figname):
+            with open(figname, 'r') as figfile:
+                figure = figfile.read()
+                put_html(figure)
+        figname = f'temp/{prefix}_fig3.html'
+        if os.path.exists(figname):
+            with open(figname, 'r') as figfile:
+                figure = figfile.read()
+                put_html(figure)
 
 def main():
     global CONFIG
