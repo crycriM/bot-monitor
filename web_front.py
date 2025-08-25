@@ -247,11 +247,6 @@ def multistrategy_matching_req(account):
             formatters={
                 'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
                 'real_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
-                'price': format_ref_price,
-                # 'strategy_count': lambda x: f'{x:d}',
-                'dust': lambda x: str(x),
-                'is_mismatch': lambda x: str(x),
-                # 'mismatch_duration': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
             },
             classes='card',
             index=False
@@ -270,7 +265,7 @@ def multistrategy_matching_req(account):
         put_text('Dust')
         put_html(dust.to_html(
             formatters={
-                'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
+                'theo_amount': lambda x: f'{x:.1f}' if pd.notna(x) else 'N/A'
             },
             classes='card',
             index=False

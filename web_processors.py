@@ -43,7 +43,7 @@ global app
 SignalType = Enum('SignalType', [('STOP', 'stop'),
                                  ('REFRESH', 'refresh'),
                                  ('MATCHING', 'check_matching'),
-                                 ('RUNNING', 'check_running'),
+                                 ('CHECKALL', 'check_all'),
                                  ('FILE', 'update_file'),
                                  ('PRICE_UPDATE', 'update_prices')])
 
@@ -664,7 +664,7 @@ class Processor:
 
         return message
 
-    async def check_pnl(self):
+    async def check_all(self):
         message = []
 
         for session, params in self.session_configs.items():
@@ -677,10 +677,6 @@ class Processor:
                     pnl_2d = pnl_dict.get('perfcum', {}).get('002d', 0.0)
                     if pnl_2d < -0.05 and self.processor_config[session].get('check_pnl'):
                         message += [f'2day PnL < -5% for {strategy_name}@{session}']
-        return message
-
-    async def check_matching(self):
-        message = []
 
         for session, matching_dict in self.matching.items():
             for account, matching in matching_dict.items():
@@ -1005,9 +1001,9 @@ def runner(event, processor, pace):
         event.set()
         web_runner = asyncio.create_task(run_web_processor())
         heart_runner = asyncio.create_task(heartbeat(task_queue, pace['REFRESH'], SignalType.REFRESH))
+        running_runner = asyncio.create_task(heartbeat(task_queue, pace['CHECK'], SignalType.CHECKALL))
         match_runner = asyncio.create_task(heartbeat(task_queue, pace['MATCHING'], SignalType.MATCHING))
         quote_runner = asyncio.create_task(heartbeat(task_queue, pace['PRICE_UPDATE'], SignalType.PRICE_UPDATE))
-        running_runner = asyncio.create_task(heartbeat(task_queue, pace['RUNNING'], SignalType.RUNNING))
         file_watcher = asyncio.create_task(watch_file_modifications(task_queue))
 
         while True:
@@ -1018,14 +1014,14 @@ def runner(event, processor, pace):
             if item == SignalType.REFRESH:
                 task = asyncio.create_task(refresh(with_matching=True))
                 task.add_done_callback(lambda _: task_queue.task_done())
+            elif item == SignalType.CHECKALL:
+                task = asyncio.create_task(check(processor.check_all()))
+                task.add_done_callback(lambda _: task_queue.task_done())
             elif item == SignalType.MATCHING:
                 task = asyncio.create_task(check(processor.check_matching()))
                 task.add_done_callback(lambda _: task_queue.task_done())
             elif item == SignalType.PRICE_UPDATE:
                 task = asyncio.create_task(check(processor.refresh_quotes()))
-                task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.RUNNING:
-                task = asyncio.create_task(check(processor.check_running()))
                 task.add_done_callback(lambda _: task_queue.task_done())
             elif isinstance(item, tuple) and item[0] == SignalType.FILE:
                 await processor.update_config(item[1], item[2])
