@@ -191,7 +191,8 @@ def pnl_req():
 def multistrategy_matching_req(account):
     session, account = account.split(':')
     account_key = f"{account}"
-    
+
+
     # Fetch multistrategy position details
     uri_details = GATEWAY + '/matching'
     params_details = {'session': session, 'account_key': account_key}
