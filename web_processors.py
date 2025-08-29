@@ -36,7 +36,7 @@ from datafeed.utils_online import NpEncoder, parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
 from web_broker import WebSpreaderBroker
 from reporting.bot_reporting import TGMessenger
-from data_analyzer.position_comparator import compare_positions
+# from data_analyzer.position_comparator import compare_positions
 
 global app
 
@@ -184,8 +184,8 @@ class Processor:
                 else:
                     logging.warning(f'No real pos file {real_pos_file} for {session} {trade_exchange} {account}')
                     real_pos_data = {}
-                self.account_theo_pos[session][key] = theo_pos_data
-                self.account_real_pos[session][key] = real_pos_data
+                self.account_theo_pos[session][key] = theo_pos_data.copy()
+                self.account_real_pos[session][key] = real_pos_data.copy()
                 # # get account positions from exchange
                 # positions = await self.get_account_position(trade_exchange, account)
                 #
@@ -944,8 +944,8 @@ def runner(event, processor, pace):
             return JSONResponse(report)
 
         @app.get('/matching')
-        async def read_matching(session: str = 'binance', key: str = 'bitget_2'):
-            report = processor.get_matching(session, key)
+        async def read_matching(session: str = 'binance', account_key: str = 'bitget_2'):
+            report = processor.get_matching(session, account_key)
             return JSONResponse(report.to_dict(orient='index'))
             # if isinstance(report, pd.DataFrame):
             #     return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
@@ -1014,12 +1014,12 @@ def runner(event, processor, pace):
             if item == SignalType.REFRESH:
                 task = asyncio.create_task(refresh(with_matching=True))
                 task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.CHECKALL:
-                task = asyncio.create_task(check(processor.check_all()))
-                task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.MATCHING:
-                task = asyncio.create_task(check(processor.check_matching()))
-                task.add_done_callback(lambda _: task_queue.task_done())
+            # elif item == SignalType.CHECKALL:
+            #     task = asyncio.create_task(check(processor.check_all()))
+            #     task.add_done_callback(lambda _: task_queue.task_done())
+            # elif item == SignalType.MATCHING:
+            #     task = asyncio.create_task(check(processor.check_matching()))
+            #     task.add_done_callback(lambda _: task_queue.task_done())
             elif item == SignalType.PRICE_UPDATE:
                 task = asyncio.create_task(check(processor.refresh_quotes()))
                 task.add_done_callback(lambda _: task_queue.task_done())

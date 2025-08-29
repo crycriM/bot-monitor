@@ -3,6 +3,7 @@ pace:
   REFRESH: 300
   CHECK: 240
   MATCHING: 600
+  RUNNING: 30
   PRICE_UPDATE: 1800
 session:
   binance:
