@@ -279,8 +279,8 @@ class Processor:
         now = today_utc()
         accounts = self.used_accounts[session]
         working_directory = self.session_configs[session]['working_directory']
-        days = [1, 2, 7, 30, 90, 180]
-        last_date = {day: now - timedelta(days=day) for day in days}
+        back_days = [1, 2, 7, 30, 90, 180]
+        last_date = {day: now - timedelta(days=day) for day in back_days}
         real_pnl_dict = {}
         account_list = []
         for strategy_name, (trade_exchange, account_number) in accounts.items():
@@ -307,7 +307,7 @@ class Processor:
                     aum = aum.loc[~aum.index.duplicated(keep='last')]
                     daily = aum['perf'].resample('1d').agg('sum').fillna(0)
                     hourly = aum['perf'].resample('1H').agg('sum').fillna(0)
-                    is_live = hourly.loc[hourly.index > last_date[days[0]]].std() > 0
+                    is_live = hourly.loc[hourly.index > last_date[back_days[0]]].std() > 0
                     if is_live:
                         logging.info(f'session {session} account {account} is live')
                         real_pnl_dict.update({'vol': {},
@@ -316,14 +316,14 @@ class Processor:
                                          'pnlcum': {},
                                          'drawdawn': {}
                                          })
-                except:
+                except Exception as e:
                     is_live = False
                     aum = pd.DataFrame()
                     daily = pd.Series()
-                    logging.error(f'Error in aum file {aum_file} for account {account_key}')
-
+                    logging.error(f'Error in aum file {aum_file} for account {account_key}: {e.args[0]}')
+                    logging.error(traceback.format_exc())
                 if is_live:
-                    for day in days:
+                    for day in back_days:
                         try:
                             last_aum = aum.loc[aum.index > last_date[day]]
                             vol = daily.loc[daily.index > last_date[day]].std() * np.sqrt(365)
