@@ -13,6 +13,7 @@ import argparse
 import traceback
 import yaml
 from math import isclose
+import typing
 
 from datetime import datetime, timedelta
 
@@ -24,7 +25,7 @@ except:
     from datetime import timezone
     UTC = timezone.utc
 from fastapi import FastAPI, HTTPException
-from starlette.responses import JSONResponse, HTMLResponse
+from starlette.responses import Response, BackgroundTask
 import uvicorn
 from dotenv import load_dotenv
 import numpy as np
@@ -58,6 +59,28 @@ UPI:
 /multistrat_summary?(account_or_strategy, timeframe}
 """
 
+
+class JSONResponse(Response):
+    media_type = "application/json"
+
+    def __init__(
+        self,
+        content: typing.Any,
+        status_code: int = 200,
+        headers: typing.Mapping[str, str] | None = None,
+        media_type: str | None = None,
+        background: BackgroundTask | None = None,
+    ) -> None:
+        super().__init__(content, status_code, headers, media_type, background)
+
+    def render(self, content: typing.Any) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=True,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
 
 
 class Processor:
@@ -198,7 +221,8 @@ class Processor:
 
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
         match = pd.concat([pd.Series(pos_data), pd.Series(pos_data_theo), pd.Series(quotes)], axis=1).rename(
-            columns={0: 'real', 1: 'theo', 2: 'price'}).fillna(0)
+            columns={0: 'real', 1: 'theo', 2: 'price'})
+        match = match.dropna(subset=['real', 'theo'], how='all')
         difference_qty = match['real'] - match['theo']
         difference = difference_qty * match['price']
         match['delta_qty'] = difference_qty
@@ -228,7 +252,10 @@ class Processor:
 
         for key, pos_data in all_pos_data.items():
             pos_data_theo = all_pos_data_theo.get(key, {})
-            self.matching[session][key] = self._do_one_matching(pos_data, pos_data_theo, quotes)
+            matching_data = self._do_one_matching(pos_data, pos_data_theo, quotes)
+            self.matching[session][key] = matching_data
+            if key == 'bitget_1':
+                matching_data.to_csv('web_matching.csv')
 
     async def fetch_quotes(self, session):
         """
@@ -252,8 +279,10 @@ class Processor:
             if 'last' in last:
                 price = last['last']
             else:
+                logging.info(f'Missing {ticker} in fetch_ticker result')
                 price = None
             quotes[symbol] = price
+            await asyncio.sleep(0.1)  # to avoid rate limit
 
         await end_point._exchange_async.close()
         await bh.close_exchange_async()
@@ -983,9 +1012,10 @@ def runner(event, processor, pace):
         await processor.refresh_quotes()
 
     async def send_alert(message):
-        for error in message:
-            TGMessenger.send(error, 'CM')
-        logging.info(f'Sent {len(message)} msg')
+        if message is not None:
+            for error in message:
+                TGMessenger.send(error, 'CM')
+            logging.info(f'Sent {len(message)} msg')
 
     async def check(checking_coro):
         messages = await checking_coro
