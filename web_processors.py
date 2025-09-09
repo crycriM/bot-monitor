@@ -830,15 +830,26 @@ class Processor:
 
         quotes = {}
 
-        for coin in positions:
-            ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
-            symbol, _ = bh.symbol_to_market_with_factor(coin, universal=False)
-            last = await end_point._exchange_async.fetch_ticker(ticker)
-            if 'last' in last:
-                price = last['last']
-            else:
-                price = None
-            quotes[symbol] = price
+        if end_point._exchange_async.has.get('fetchTickers', False):
+            tickers = []
+            for coin in positions:
+                ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
+                tickers.append(ticker)
+            result = await end_point._exchange_async.fetchTickers(tickers)
+
+            for ticker, info in result.items():
+                symbol, _ = bh.symbol_to_market_with_factor(ticker, universal=False)
+                quotes[symbol] = info.get('last', None)
+        else:
+            for coin in positions:
+                symbol = bh.symbol_to_market_with_factor(coin)[0]
+                ticker = await end_point._exchange_async.fetch_ticker(symbol)
+                if 'last' in ticker:
+                    price = ticker['last']
+                else:
+                    price = None
+                quotes[symbol] = price
+                await asyncio.sleep(0.2)
 
         cash = await end_point.get_cash_async(['USDT', 'BTC'])
 
