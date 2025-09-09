@@ -222,7 +222,7 @@ class Processor:
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
         match = pd.concat([pd.Series(pos_data), pd.Series(pos_data_theo), pd.Series(quotes)], axis=1).rename(
             columns={0: 'real', 1: 'theo', 2: 'price'})
-        match = match.dropna(subset=['real', 'theo'], how='all')
+        match = match.dropna(subset=['real', 'theo'], how='all').fillna(0)
         difference_qty = match['real'] - match['theo']
         difference = difference_qty * match['price']
         match['delta_qty'] = difference_qty
@@ -282,7 +282,7 @@ class Processor:
                 logging.info(f'Missing {ticker} in fetch_ticker result')
                 price = None
             quotes[symbol] = price
-            await asyncio.sleep(0.1)  # to avoid rate limit
+            await asyncio.sleep(0.2)  # to avoid rate limit
 
         await end_point._exchange_async.close()
         await bh.close_exchange_async()
