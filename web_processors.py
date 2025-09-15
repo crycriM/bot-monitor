@@ -218,6 +218,7 @@ class Processor:
                 #     self.account_positions[session] = {}
                 # self.account_positions[session][key] = positions
                 self.perimeters[session].update(set(theo_pos_data.keys()))
+
                 self.perimeters[session].update(set(real_pos_data.keys()))
         return
 
