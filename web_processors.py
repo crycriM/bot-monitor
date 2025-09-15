@@ -191,7 +191,7 @@ class Processor:
                 self.account_real_pos[session] = {}
             for (trade_exchange, account) in account_list[session]:
                 key = '_'.join((trade_exchange, account))
-                logging.info(f'Getting account positions for {trade_exchange}')
+                logging.info(f'Getting account positions for {key}')
                 working_directory = self.session_configs[session]['working_directory']
                 trade_account_dir = os.path.join(working_directory, key)
                 theo_pos_file = os.path.join(trade_account_dir, 'current_state_theo.pos')
@@ -199,13 +199,15 @@ class Processor:
 
                 if os.path.exists(theo_pos_file):
                     theo_pos_data = read_pos_file(theo_pos_file)
+                    logging.info(f'Found {len(theo_pos_data)} theo positions for {session} {key}')
                 else:
-                    logging.warning(f'No theo pos file {theo_pos_file} for {session} {trade_exchange} {account}')
+                    logging.warning(f'No theo pos file {theo_pos_file} for {session} {key}')
                     theo_pos_data = {}
                 if os.path.exists(real_pos_file):
                     real_pos_data = read_pos_file(real_pos_file)
+                    logging.info(f'Found {len(real_pos_data)} real positions for {session} {key}')
                 else:
-                    logging.warning(f'No real pos file {real_pos_file} for {session} {trade_exchange} {account}')
+                    logging.warning(f'No real pos file {real_pos_file} for {session} {key}')
                     real_pos_data = {}
                 self.account_theo_pos[session][key] = theo_pos_data.copy()
                 self.account_real_pos[session][key] = real_pos_data.copy()
