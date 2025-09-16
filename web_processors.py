@@ -260,6 +260,31 @@ class Processor:
             if key == 'bitget_1':
                 matching_data.to_csv('web_matching.csv')
 
+    async def _fetch_all_tickers(self, bh, end_point, perimeter):
+        quotes = {}
+
+        if end_point._exchange_async.has.get('fetchTickers', False):
+            tickers = []
+            for coin in perimeter:
+                ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
+                tickers.append(ticker)
+            result = await end_point._exchange_async.fetchTickers(tickers)
+
+            for ticker, info in result.items():
+                symbol, _ = bh.symbol_to_market_with_factor(ticker, universal=False)
+                quotes[symbol] = info.get('last', None)
+        else:
+            for coin in perimeter:
+                symbol = bh.symbol_to_market_with_factor(coin)[0]
+                ticker = await end_point._exchange_async.fetch_ticker(symbol)
+                if 'last' in ticker:
+                    price = ticker['last']
+                else:
+                    price = None
+                quotes[symbol] = price
+                await asyncio.sleep(0.2)
+        return quotes
+
     async def fetch_quotes(self, session):
         """
         Fetch quotes for all pairs in the session.
@@ -275,17 +300,11 @@ class Processor:
         end_point = BrokerHandler.build_end_point(exchange_name)
         bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                            logger_name='default')
+        quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
+
         for coin in self.perimeters[session]:
-            ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
-            symbol, _ = bh.symbol_to_market_with_factor(coin, universal=False)
-            last = await end_point._exchange_async.fetch_ticker(ticker)
-            if 'last' in last:
-                price = last['last']
-            else:
-                logging.info(f'Missing {ticker} in fetch_ticker result')
-                price = None
-            quotes[symbol] = price
-            await asyncio.sleep(0.2)  # to avoid rate limit
+            if coin not in quotes:
+                logging.info(f'Missing {coin} in fetch_ticker result')
 
         await end_point._exchange_async.close()
         await bh.close_exchange_async()
@@ -831,28 +850,7 @@ class Processor:
             logging.warning(f'exchange/account {exchange_name}/{account} sent exception {e.args}')
             positions = {}
 
-        quotes = {}
-
-        if end_point._exchange_async.has.get('fetchTickers', False):
-            tickers = []
-            for coin in positions:
-                ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
-                tickers.append(ticker)
-            result = await end_point._exchange_async.fetchTickers(tickers)
-
-            for ticker, info in result.items():
-                symbol, _ = bh.symbol_to_market_with_factor(ticker, universal=False)
-                quotes[symbol] = info.get('last', None)
-        else:
-            for coin in positions:
-                symbol = bh.symbol_to_market_with_factor(coin)[0]
-                ticker = await end_point._exchange_async.fetch_ticker(symbol)
-                if 'last' in ticker:
-                    price = ticker['last']
-                else:
-                    price = None
-                quotes[symbol] = price
-                await asyncio.sleep(0.2)
+        quotes = await self._fetch_all_tickers(bh, end_point, positions)
 
         cash = await end_point.get_cash_async(['USDT', 'BTC'])
 
