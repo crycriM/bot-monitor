@@ -226,17 +226,20 @@ class Processor:
         match = pd.concat([pd.Series(pos_data), pd.Series(pos_data_theo), pd.Series(quotes)], axis=1).rename(
             columns={0: 'real', 1: 'theo', 2: 'price'})
         match = match.dropna(subset=['real', 'theo'], how='all').fillna(0)
+        real_amnt = match['real'] * match['price']
+        theo_amnt = match['theo'] * match['price']
         difference_qty = match['real'] - match['theo']
-        difference = difference_qty * match['price']
+        difference = real_amnt - theo_amnt
+        rel_difference = difference_qty / (0.5 * (match['real'] + match['theo']))
         match['delta_qty'] = difference_qty
         match['delta_amn'] = difference
-        real_amnt = match['real'] * match['price']
+        match['rel_delta'] = rel_difference
 
         def very_nonzero(x, tolerance):
             return not isclose(x, 0, abs_tol=tolerance)
 
         not_dust = real_amnt.apply(very_nonzero, tolerance=10)
-        is_mismatch = difference.apply(very_nonzero, tolerance=10)
+        is_mismatch = rel_difference.apply(very_nonzero, tolerance=0.05)
         match['is_mismatch'] = is_mismatch
         match['dust'] = ~not_dust
 
