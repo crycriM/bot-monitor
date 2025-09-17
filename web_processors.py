@@ -237,7 +237,7 @@ class Processor:
         def very_nonzero(x, tolerance):
             return not isclose(x, 0, abs_tol=tolerance)
 
-        not_dust = real_amnt.apply(very_nonzero, tolerance=20)
+        not_dust = real_amnt.apply(very_nonzero, tolerance=50)
         is_mismatch = rel_difference.apply(very_nonzero, tolerance=0.05)
         match['is_mismatch'] = is_mismatch & not_dust
         match['dust'] = (~not_dust) & is_mismatch

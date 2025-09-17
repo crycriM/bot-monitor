@@ -241,9 +241,9 @@ def multistrategy_matching_req(account):
         ))
         put_html('<br>')  # Add spacing between summary and main table
         # Display main table
-        meaningful = main_df[~(main_df['is_dust'] | main_df['is_mismatch'])][['token', 'theo_amount', 'real_amount']]
-        count_pos = (meaningful['real']>0).sum()
-        count_neg = (meaningful['real']<0).sum()
+        meaningful = main_df[~(main_df['is_dust'])][['token', 'theo_amount', 'real_amount']]
+        count_pos = (meaningful['real_amount']>0).sum()
+        count_neg = (meaningful['real_amount']<0).sum()
         tc = pd.DataFrame({'real_pos':[count_pos, count_neg]}, index=['long#', 'short#'])
 
         dust = main_df[main_df['is_dust']][['token', 'real_amount']]
@@ -254,7 +254,7 @@ def multistrategy_matching_req(account):
                 'real_pos': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
             },
             classes='card',
-            index=False
+            index=True
         ))
         put_html('<br>')  # Add spacing between summary and main table
         put_text('Mismatched positions')
