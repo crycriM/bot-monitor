@@ -218,7 +218,6 @@ class Processor:
                 #     self.account_positions[session] = {}
                 # self.account_positions[session][key] = positions
                 self.perimeters[session].update(set(theo_pos_data.keys()))
-
                 self.perimeters[session].update(set(real_pos_data.keys()))
         return
 
@@ -273,8 +272,13 @@ class Processor:
                 tickers.append(ticker)
             result = await end_point._exchange_async.fetchTickers(tickers)
 
-            for ticker, info in result.items():
+            for coin in perimeter:
+                ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
                 symbol, _ = bh.symbol_to_market_with_factor(ticker, universal=False)
+                if ticker in result:
+                    info = result[ticker]
+                else:
+                    info = {}
                 quotes[symbol] = info.get('last', None)
         else:
             for coin in perimeter:
@@ -299,14 +303,14 @@ class Processor:
             'exchange_trade': exchange_name,
             'account_trade': account
         }
-        quotes = {}
+
         end_point = BrokerHandler.build_end_point(exchange_name)
         bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                            logger_name='default')
         quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
 
         for coin in self.perimeters[session]:
-            if coin not in quotes:
+            if quotes.get(coin, None) is None:
                 logging.info(f'Missing {coin} in fetch_ticker result')
 
         await end_point._exchange_async.close()
