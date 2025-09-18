@@ -224,7 +224,9 @@ class Processor:
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
         match = pd.concat([pd.Series(pos_data), pd.Series(pos_data_theo), pd.Series(quotes)], axis=1).rename(
             columns={0: 'real', 1: 'theo', 2: 'price'})
-        match = match.dropna(subset=['real', 'theo'], how='all').fillna(0)
+
+        match = match.dropna(subset=['real', 'theo'], how='all')
+        match[['real', 'theo']] = match[['real', 'theo']].fillna(0)
         real_amnt = match['real'] * match['price']
         theo_amnt = match['theo'] * match['price']
         difference_qty = match['real'] - match['theo']
