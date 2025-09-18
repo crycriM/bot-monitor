@@ -266,6 +266,7 @@ class Processor:
         quotes = {}
 
         if end_point._exchange_async.has.get('fetchTickers', False):
+            logging.info(f'entering fetchTickers')
             tickers = []
             for coin in perimeter:
                 ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
@@ -281,6 +282,7 @@ class Processor:
                     info = {}
                 quotes[symbol] = info.get('last', None)
         else:
+            logging.info(f'entering fetch Ticker loop')
             for coin in perimeter:
                 symbol = bh.symbol_to_market_with_factor(coin)[0]
                 ticker = await end_point._exchange_async.fetch_ticker(symbol)
@@ -308,6 +310,8 @@ class Processor:
         bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                            logger_name='default')
         quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
+        with open('web_quotes.txt', 'w') as myfile:
+            print(quotes, file=myfile)
 
         for coin in self.perimeters[session]:
             if quotes.get(coin, None) is None:
