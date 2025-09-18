@@ -300,6 +300,19 @@ def multistrategy_matching_req(account):
                 figure = figfile.read()
                 put_html(figure)
 
+        put_html('<br>')  # Add spacing between summary and main table
+
+        put_html(main_df[['token', 'theo_amount', 'real_amount']].to_html(
+            formatters={
+                'theo_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
+                'real_amount': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
+            },
+            classes='card',
+            index=False
+        ))
+
+
+
 def main():
     global CONFIG
     session_config = CONFIG['session']
