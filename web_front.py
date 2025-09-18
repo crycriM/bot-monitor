@@ -241,17 +241,23 @@ def multistrategy_matching_req(account):
         ))
         put_html('<br>')  # Add spacing between summary and main table
         # Display main table
-        meaningful = main_df[~(main_df['is_dust'])][['token', 'theo_amount', 'real_amount']]
+
+        meaningful = main_df[~(main_df['is_dust'])&(main_df['theo_amount'] != 0)][['token', 'theo_amount', 'real_amount']]
         count_pos = (meaningful['real_amount']>0).sum()
         count_neg = (meaningful['real_amount']<0).sum()
-        tc = pd.DataFrame({'real_pos':[count_pos, count_neg]}, index=['long#', 'short#'])
-
+        count_pos_th = (meaningful['theo_amount']>0).sum()
+        count_neg_th = (meaningful['theo_amount']<0).sum()
+        tc = pd.DataFrame({'real_pos':[count_pos, count_neg],
+                           'theo_pos':[count_pos_th, count_neg_th]
+                           }, index=['long#', 'short#'])
         dust = main_df[main_df['is_dust']][['token', 'real_amount']]
         mismatch = main_df[main_df['is_mismatch']][['token', 'theo_amount', 'real_amount']]
-        put_text('Matched positions')
+
+        put_text('Non dust positions')
         put_html(tc.to_html(
             formatters={
-                'real_pos': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
+                'real_pos': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A',
+                'theo_pos': lambda x: f'{x:.0f}' if pd.notna(x) else 'N/A'
             },
             classes='card',
             index=True
@@ -270,7 +276,7 @@ def multistrategy_matching_req(account):
         put_text('Dust')
         put_html(dust.to_html(
             formatters={
-                'theo_amount': lambda x: f'{x:.1f}' if pd.notna(x) else 'N/A'
+                'real_amount': lambda x: f'{x:.1f}' if pd.notna(x) else 'N/A'
             },
             classes='card',
             index=False
