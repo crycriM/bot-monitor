@@ -309,17 +309,18 @@ class Processor:
         end_point = BrokerHandler.build_end_point(exchange_name)
         bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                            logger_name='default')
+        logging.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
         quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
         with open('web_quotes.txt', 'w') as myfile:
             print(quotes, file=myfile)
 
         for coin in self.perimeters[session]:
-            if quotes.get(coin, None) is None:
+            if quotes not in coin:
                 logging.info(f'Missing {coin} in fetch_ticker result')
 
         await end_point._exchange_async.close()
         await bh.close_exchange_async()
-        logging.info(f'Quotes ready for session {session}')
+        logging.info(f'{len(quotes)} quotes ready for session {session}')
 
         self.quotes[session] = quotes
 
