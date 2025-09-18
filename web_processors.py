@@ -262,7 +262,7 @@ class Processor:
             matching_data = self._do_one_matching(pos_data, pos_data_theo, quotes)
             self.matching[session][key] = matching_data
             if key == 'bitget_1':
-                matching_data.to_csv('web_matching.csv')
+                matching_data.to_csv('output/web_matching.csv')
 
     async def _fetch_all_tickers(self, bh, end_point, perimeter):
         quotes = {}
@@ -313,11 +313,11 @@ class Processor:
                            logger_name='default')
         logging.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
         quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
-        with open('web_quotes.txt', 'w') as myfile:
+        with open('output/web_quotes.txt', 'w') as myfile:
             print(quotes, file=myfile)
 
         for coin in self.perimeters[session]:
-            if quotes not in coin:
+            if coin not in quotes:
                 logging.info(f'Missing {coin} in fetch_ticker result')
 
         await end_point._exchange_async.close()
