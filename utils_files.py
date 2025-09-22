@@ -73,6 +73,6 @@ def read_pos_file(pos_filename):
                         continue
                     pos_data[key] = float(value)
         except Exception as e:
-            raise FileNotFoundError(f'Error parsing theo pos file {pos_filename}: {e}')
+            raise FileNotFoundError(f'Error parsing pos file {pos_filename}: {e}')
 
     return pos_data

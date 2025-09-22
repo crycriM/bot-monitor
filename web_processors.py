@@ -218,7 +218,9 @@ class Processor:
                 #     self.account_positions[session] = {}
                 # self.account_positions[session][key] = positions
                 self.perimeters[session].update(set(theo_pos_data.keys()))
+                logging.info(f'Added {len(theo_pos_data)} coins from theo pos file to perimeter for {session} {key}')
                 self.perimeters[session].update(set(real_pos_data.keys()))
+                logging.info(f'Updated with real pos, perimeter is now  {len(self.perimeters[session])} coins for {session} {key}')
         return
 
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
@@ -307,24 +309,27 @@ class Processor:
             'exchange_trade': exchange_name,
             'account_trade': account
         }
+        try:
+            end_point = BrokerHandler.build_end_point(exchange_name)
+            bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
+                               logger_name='broker_handler')
+            logging.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
+            quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
+            with open('output/web_quotes.txt', 'w') as myfile:
+                print(quotes, file=myfile)
 
-        end_point = BrokerHandler.build_end_point(exchange_name)
-        bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
-                           logger_name='default')
-        logging.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
-        quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
-        with open('output/web_quotes.txt', 'w') as myfile:
-            print(quotes, file=myfile)
+            for coin in self.perimeters[session]:
+                if coin not in quotes:
+                    logging.info(f'Missing {coin} in fetch_ticker result')
 
-        for coin in self.perimeters[session]:
-            if coin not in quotes:
-                logging.info(f'Missing {coin} in fetch_ticker result')
+            await end_point._exchange_async.close()
+            await bh.close_exchange_async()
+            logging.info(f'{len(quotes)} quotes ready for session {session}')
 
-        await end_point._exchange_async.close()
-        await bh.close_exchange_async()
-        logging.info(f'{len(quotes)} quotes ready for session {session}')
-
-        self.quotes[session] = quotes
+            self.quotes[session] = quotes
+        except Exception as e:
+            self.quotes[session] = {}
+            logging.error(f'Error fetching quotes for session {session}: {e.args[0]}')
 
     async def update_config(self, session, config_file):
         if os.path.exists(config_file):
@@ -781,9 +786,7 @@ class Processor:
         tasks = []
         logging.info('refreshing quotes')
         for session in self.perimeters:
-            if session not in self.quotes:
-                self.quotes[session] = {}
-                tasks.append(asyncio.create_task(self.fetch_quotes(session)))
+            tasks.append(asyncio.create_task(self.fetch_quotes(session)))
         await asyncio.gather(*tasks)
         return
 
