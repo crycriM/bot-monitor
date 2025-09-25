@@ -123,6 +123,7 @@ class Processor:
 
         self.aum = {}
         self.strategy_state = {}
+        self.strategy_types = {}
         self.summaries = {}
         self.pnl = {}
         self.matching = {}
@@ -156,10 +157,12 @@ class Processor:
                         continue
                     if session not in self.used_accounts:
                         self.used_accounts[session] = {}
+                        self.strategy_types[session] = {}
                     if destination == 'dummy':
                         self.used_accounts[session][strategy_name] = ('dummy', 'dummy')
                     else:
                         self.used_accounts[session][strategy_name] = (strat_exchange, strat_account)
+                    self.strategy_types[session][strategy_name] = strategy_param.get('type', 'other')
         except Exception as e:
             logging.error(f'Error updating accounts by strat: {e.args[0]}')
             logging.error(traceback.format_exc())
@@ -503,6 +506,7 @@ class Processor:
         now = today_utc()
         strategy_directory = os.path.join(working_directory, strategy_name)
         pnl_file = os.path.join(strategy_directory, 'pnl.csv')
+        strategy_type = self.strategy_types[session][strategy_name]
 
         days = [1, 2, 7, 30, 90, 180]
         last_date = {day: now - timedelta(days=day) for day in days}
@@ -534,6 +538,7 @@ class Processor:
 
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': last[day] for day in days},
                             'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
+                pnl_dict['strategy_type'] = strategy_type
             except:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
                             'sum_theo': {f'{day:03d}d': 0 for day in days}})
