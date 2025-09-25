@@ -182,6 +182,7 @@ def pnl_req():
         except Exception as e:
             print(f"JSON parse error for pnl: {e}")
         df = dict_to_df(pnl_dict, False)
+        pnl_table = df[['mean_theo']]
         with use_scope('pnl_rez'):
             put_html(df.to_html(float_format='{:5.2f}'.format))
     else:
