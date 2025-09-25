@@ -152,11 +152,14 @@ class Processor:
                     active = strategy_param.get('active', False)
                     destination = strategy_param.get('send_orders', 'dummy')
 
-                    if not active or destination == 'dummy':
+                    if not active:
                         continue
                     if session not in self.used_accounts:
                         self.used_accounts[session] = {}
-                    self.used_accounts[session][strategy_name] = (strat_exchange, strat_account)
+                    if destination == 'dummy':
+                        self.used_accounts[session][strategy_name] = ('dummy', 'dummy')
+                    else:
+                        self.used_accounts[session][strategy_name] = (strat_exchange, strat_account)
         except Exception as e:
             logging.error(f'Error updating accounts by strat: {e.args[0]}')
             logging.error(traceback.format_exc())
@@ -182,7 +185,7 @@ class Processor:
                     account_list[session].append((trade_exchange, account))
 
                 # get strategy theo positions from bot (already loaded by get_summary)
-                strat_theo_pos = self.summaries[session][strategy_name]['theo']
+                # strat_theo_pos = self.summaries[session][strategy_name]['theo']
             strategy_positions[session] = strategy_positions.get(session, {})
 
             # get account positions from live file
@@ -853,6 +856,8 @@ class Processor:
             exchange_name = 'bybit'
         elif 'bitget' in exchange:
             exchange_name = 'bitget'
+        elif exchange == 'hyperliquid':
+            exchange_name = 'hyperliquid'
         else:
             return {}
         params = {
@@ -906,6 +911,8 @@ class Processor:
         elif 'bitget' in exchange:
             exchange_trade = 'bitget'
             exclude = []
+        elif exchange == 'hyperliquid':
+            exchange_trade = 'hyperliquid'
         else:
             exchange_trade = 'binance'
             exclude = ['BNB', 'BNBUSDT']
