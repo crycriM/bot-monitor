@@ -182,9 +182,14 @@ def pnl_req():
         except Exception as e:
             print(f"JSON parse error for pnl: {e}")
         df = dict_to_df(pnl_dict, False)
-        pnl_table = df[['mean_theo']]
+        df.index.names = ('session', 'strat', 'indicator')
+
+        pnl_table = df.xs('mean_theo', level='indicator')
+        pnl_pivot = pnl_table.pivot_table(index=('session', 'type'), values=[cols for cols in pnl_table.columns if cols != 'type'], aggfunc='mean')
         with use_scope('pnl_rez'):
             put_html(df.to_html(float_format='{:5.2f}'.format))
+            put_html('<br>')  # Add spacing between tables
+            put_html(pnl_pivot.to_html(float_format='{:.2f}'.format))
     else:
         with use_scope('pnl_rez'):
             put_text(f"Error: PnL endpoint returned status {response.status_code}: {response.text}")
