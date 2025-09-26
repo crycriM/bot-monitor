@@ -536,9 +536,8 @@ class Processor:
                     if np.isnan(value) or np.isinf(value):
                         last_cum[day] = 0
 
-                pnl_dict.update({'mean_theo': {f'{day:03d}d': last[day] for day in days},
-                            'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
-                pnl_dict['strategy_type'] = strategy_type
+                pnl_dict.update({'mean_theo': {f'{day:03d}d': last[day] for day in days}.update({'strategy_type': strategy_type}),
+                            'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}.update({'strategy_type': strategy_type})})
             except:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
                             'sum_theo': {f'{day:03d}d': 0 for day in days}})
