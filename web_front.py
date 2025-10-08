@@ -185,7 +185,7 @@ def pnl_req():
         df.index.names = ('session', 'strat', 'indicator')
 
         pnl_table = df.xs('mean_theo', level='indicator')
-        pnl_pivot = pnl_table.pivot_table(index=('session', 'type'), values=[cols for cols in pnl_table.columns if cols != 'type'], aggfunc='mean')
+        pnl_pivot = pnl_table.pivot_table(index=('session', 'strategy_type'), values=[cols for cols in pnl_table.columns if cols != 'strategy_type'], aggfunc='mean')
         with use_scope('pnl_rez'):
             put_html(df.to_html(float_format='{:5.2f}'.format))
             put_html('<br>')  # Add spacing between tables
