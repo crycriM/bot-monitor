@@ -159,7 +159,7 @@ class Processor:
                         self.used_accounts[session] = {}
                         self.strategy_types[session] = {}
                     if destination == 'dummy':
-                        self.used_accounts[session][strategy_name] = ('dummy', 'dummy')
+                        self.used_accounts[session][strategy_name] = ('dummy', strat_account)
                     else:
                         self.used_accounts[session][strategy_name] = (strat_exchange, strat_account)
                     self.strategy_types[session][strategy_name] = strategy_param.get('type', 'other')
@@ -1017,7 +1017,12 @@ def runner(event, processor, pace):
         @app.get('/matching')
         async def read_matching(session: str = 'binance', account_key: str = 'bitget_2'):
             report = processor.get_matching(session, account_key)
-            return JSONResponse(report.to_dict(orient='index'))
+            try:
+                return JSONResponse(report.to_dict(orient='index'))
+            except Exception as e:
+                return JSONResponse({'session': session,
+                                     'account_key': account_key,
+                                     'error': e.args[0]})
             # if isinstance(report, pd.DataFrame):
             #     return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
             #                                                    'theo': lambda x: f'{x:.0f}',
