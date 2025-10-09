@@ -67,8 +67,8 @@ def read_pos_file(pos_filename):
                 data_str = parts[1]
                 pairs = data_str.split(', ')
                 for pair in pairs:
-                    key, value = pair.split(':')
-                    key = key.strip("'")
+                    key, value = pair.replace('USDC:USDC', 'USDCUSDC').split(':')
+                    key = key.strip("'").replace('USDCUSDC', 'USDC:USDC')
                     if key in ['equity', 'imbalance']:
                         continue
                     pos_data[key] = float(value)
