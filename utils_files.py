@@ -76,3 +76,14 @@ def read_pos_file(pos_filename):
             raise FileNotFoundError(f'Error parsing pos file {pos_filename}: {e}')
 
     return pos_data
+
+async def read_latent_file(latent_file):
+    try:
+        async with aiofiles.open(latent_file, 'r') as myfile:
+            content = await myfile.read()
+        df = pd.read_csv(StringIO(content), sep=';', header="infer", converters={0:date_parser})
+        df.columns = ['ts', 'latent_return', 'latent_pnl']
+    except:
+        df = pd.DataFrame()
+
+    return df

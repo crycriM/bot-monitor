@@ -13,8 +13,7 @@ from pywebio.input import slider
 from pywebio.session import info as session_info
 from pywebio.session import set_env
 
-GATEWAY = 'http://localhost:14440'
-#GATEWAY = 'http://54.249.107.88:14440'
+GATEWAY = 'http://localhost:14441'
 
 
 from pywebio.output import put_datatable, JSFunction, output_register_callback
@@ -438,5 +437,5 @@ if __name__ == '__main__':
             CONFIG = yaml.load(myfile, Loader=yaml.FullLoader)
     else:
         CONFIG = {}
-    start_server(main, debug=True, port=8880)
+    start_server(main, debug=True, port=8881)
     set_env(title='Tartineur furtif', output_animation=False)

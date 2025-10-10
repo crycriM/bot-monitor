@@ -126,6 +126,7 @@ class Processor:
         self.strategy_types = {}
         self.summaries = {}
         self.pnl = {}
+        self.latent = {}
         self.matching = {}
         self.dashboard = {}
         self.last_message_count = 0
@@ -201,7 +202,6 @@ class Processor:
                 working_directory = self.session_configs[session]['working_directory']
                 trade_account_dir = os.path.join(working_directory, key)
                 theo_pos_file = os.path.join(trade_account_dir, 'current_state_theo.pos')
-                real_pos_file = os.path.join(trade_account_dir, 'current_state.pos')
 
                 if os.path.exists(theo_pos_file):
                     theo_pos_data = read_pos_file(theo_pos_file)
@@ -209,12 +209,14 @@ class Processor:
                 else:
                     logging.warning(f'No theo pos file {theo_pos_file} for {session} {key}')
                     theo_pos_data = {}
-                if os.path.exists(real_pos_file):
-                    real_pos_data = read_pos_file(real_pos_file)
-                    logging.info(f'Found {len(real_pos_data)} real positions for {session} {key}')
-                else:
-                    logging.warning(f'No real pos file {real_pos_file} for {session} {key}')
-                    real_pos_data = {}
+                real_pos_data = {}
+                if trade_exchange != 'dummy':
+                    real_pos_file = os.path.join(trade_account_dir, 'current_state.pos')
+                    if os.path.exists(real_pos_file):
+                        real_pos_data = read_pos_file(real_pos_file)
+                        logging.info(f'Found {len(real_pos_data)} real positions for {session} {key}')
+                    else:
+                        logging.warning(f'No real pos file {real_pos_file} for {session} {key}')
                 self.account_theo_pos[session][key] = theo_pos_data.copy()
                 self.account_real_pos[session][key] = real_pos_data.copy()
                 # # get account positions from exchange
@@ -506,11 +508,25 @@ class Processor:
         now = today_utc()
         strategy_directory = os.path.join(working_directory, strategy_name)
         pnl_file = os.path.join(strategy_directory, 'pnl.csv')
+        latent_file = os.path.join(strategy_directory, 'latent_profit.csv')
         strategy_type = self.strategy_types[session][strategy_name]
 
         days = [1, 2, 7, 30, 90, 180]
         last_date = {day: now - timedelta(days=day) for day in days}
         pnl_dict = {}
+
+        if os.path.exists(latent_file):
+            try:
+                logging.info('reading latent file for %s, %s', session, strategy_name)
+                latent_result = await read_latent_file(latent_file)
+                pnl_dict.update({'latent_theo': latent_result['latent_return'].iloc[-1]})
+            except:
+                latent_result = pd.DataFrame()
+                logging.error(f'Error in latent file {latent_file} for strat {strategy_name}')
+            if session not in self.latent:
+                self.latent[session] = {strategy_name: latent_result}
+            else:
+                self.latent[session].update({strategy_name: latent_result})
 
         if os.path.exists(pnl_file):
             try:
@@ -724,6 +740,26 @@ class Processor:
         except Exception as e:
             logging.info(f'Exception {e.args[0]} for account {session}.{strategy_name}')
 
+
+    async def check_latent(self):
+        message = []
+        for session, params in self.session_configs.items():
+            strategies = params['strategy']
+            for strategy_name in strategies:
+                strategy_param = strategies[strategy_name]
+                if strategy_param['active'] and session in self.latent and strategy_name in self.latent[session]:
+                    latent_df = self.latent[session][strategy_name]
+                    if len(latent_df) > 0:
+                        latent_return = latent_df['latent_return'].iloc[-1]
+                        latent_pnl = latent_df['latent_pnl'].iloc[-1]
+                        if np.isnan(latent_return) or np.isinf(latent_return):
+                            latent_return = 0
+                        if np.isnan(latent_pnl) or np.isinf(latent_pnl):
+                            latent_pnl = 0
+                        logging.info(f'checking latent for {session}:{strategy_name}, found {latent_return}, {latent_pnl}')
+                        if latent_return < -0.04 and self.session_config[session].get('check_latent'):
+                            message += [f'Latent return < -4% for {strategy_name}@{session}']
+        return message
 
     async def check_running(self):
         message = []
@@ -1033,7 +1069,7 @@ def runner(event, processor, pace):
             #     else:
             #         return HTMLResponse('N/A')
 
-        config = uvicorn.Config(app, port=14440, host='0.0.0.0', lifespan='on')
+        config = uvicorn.Config(app, port=14441, host='0.0.0.0', lifespan='on')
         server = uvicorn.Server(config)
         await server.serve()
 
