@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file
+from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file
 from datafeed.utils_online import NpEncoder, parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
 from web_broker import WebSpreaderBroker
@@ -384,8 +384,9 @@ class Processor:
                     aum.set_index('date', inplace=True)  # copie
                     aum = aum.loc[~aum.index.duplicated(keep='last')]
                     daily = aum['perf'].resample('1d').agg('sum').fillna(0)
-                    hourly = aum['perf'].resample('1H').agg('sum').fillna(0)
-                    is_live = hourly.loc[hourly.index > last_date[back_days[0]]].std() > 0
+                    hourly = aum['perf'].resample('1h').agg('sum').fillna(0)
+                    extract = hourly.loc[hourly.index > last_date[back_days[0]]]
+                    is_live = extract.std() > 0
                     if is_live:
                         logging.info(f'session {session} account {account} is live')
                         real_pnl_dict.update({'vol': {},
@@ -394,6 +395,8 @@ class Processor:
                                          'pnlcum': {},
                                          'drawdawn': {}
                                          })
+                    else:
+                        logging.info(f'session {session} account {account} is not live with data {extract}')
                 except Exception as e:
                     is_live = False
                     aum = pd.DataFrame()
@@ -502,6 +505,8 @@ class Processor:
                     if session not in self.aum:
                         self.aum[session] = {}
                     self.aum[session][account_key] = real_pnl_dict
+            else:
+                logging.info(f'No {aum_file} file')
 
     async def update_pnl(self, session, working_directory, strategy_name, strategy_param):
         logging.info('updating pnl for %s, %s', session, strategy_name)
