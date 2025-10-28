@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file
+from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file
 from datafeed.utils_online import NpEncoder, parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
 from web_broker import WebSpreaderBroker
