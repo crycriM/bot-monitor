@@ -436,6 +436,6 @@ if __name__ == '__main__':
         with open(config_file, 'r') as myfile:
             CONFIG = yaml.load(myfile, Loader=yaml.FullLoader)
     else:
-        CONFIG = {}
+        raise ValueError("No config file provided. Use --config to specify the config file path.")
     start_server(main, debug=True, port=8881)
     set_env(title='Tartineur furtif', output_animation=False)
