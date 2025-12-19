@@ -35,8 +35,8 @@ import matplotlib.pyplot as plt
 from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file
 from datafeed.utils_online import NpEncoder, parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
-from web_broker import WebSpreaderBroker
-from reporting.bot_reporting import TGMessenger
+from microservice.web_broker import WebSpreaderBroker
+from microservice.reporting.bot_reporting import TGMessenger
 # from data_analyzer.position_comparator import compare_positions
 
 global app
@@ -53,7 +53,7 @@ UPI:
 /status
 /pnl
 /pose?exchange=x&account=n
-/matching?exchange=bybit&strat=pairs1
+/matching?session=bybit&account_key=pairs1
 /multiply?exchange=binance&account=cm1&factor=1.2
 /multistrategy_position_details?(session: str = 'binance', account_key: str = 'bitget_2')
 /multistrat_summary?(account_or_strategy, timeframe}
