@@ -561,6 +561,7 @@ class Processor:
                             'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
+                pnl_dict['latent_theo']['strategy_type'] = strategy_type
             except:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
                             'sum_theo': {f'{day:03d}d': 0 for day in days}})
