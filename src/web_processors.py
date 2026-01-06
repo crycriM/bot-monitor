@@ -783,6 +783,37 @@ class Processor:
                 if self.processor_config[exchange].get('check_running'):
                     message += [f'No file {heartbeat_file} ']
 
+        # Generate killswitch signal
+        for session, params in self.session_configs.items():
+            strategies = params['strategy']
+            killswitchfile = self.processor_config[session].get('kill_switch', '')
+            killswitch = {}
+
+            for strategy_name in strategies:
+                strategy_param = strategies[strategy_name]
+                if strategy_param['active'] and session in self.pnl and strategy_name in self.pnl[session]:
+                    pnl_dict = self.pnl[session][strategy_name]
+                    theopnl_1d = pnl_dict.get('sum_theo', {}).get('001d', 0.0)
+                    theopnl_2d = pnl_dict.get('sum_theo', {}).get('002d', 0.0)
+                    latent_theo = pnl_dict.get('latent_theo', 0.0)
+                    realpnl_1d = pnl_dict.get('perfcum', {}).get('001d', 0.0)
+                    realpnl_2d = pnl_dict.get('perfcum', {}).get('002d', 0.0)
+
+                    killswitch[strategy_name] = {'theopnl_1d': theopnl_1d,
+                                                 'theopnl_2d': theopnl_2d,
+                                                 'realpnl_1d': realpnl_1d,
+                                                 'realpnl_2d': realpnl_2d,
+                                                 'latent_theo': latent_theo}
+
+            if killswitchfile != '':
+                with open(killswitchfile, 'w') as myfile:
+                    if len(killswitch) > 0:
+                        logging.info(f'Writing kill switch {killswitch} to {killswitchfile}')
+                        json.dump(killswitch, myfile)
+                    else:
+                        logging.info(f'No kill switch for {killswitchfile}')
+                        myfile.write('{}')
+
         return message
 
     async def check_all(self):
