@@ -1,0 +1,108 @@
+openapi: 3.0.3
+info:
+  title: EDO Processor API
+  description: API pour gérer et surveiller les stratégies de trading
+  version: 1.0.0
+servers:
+  - url: http://localhost:14040
+    description: Serveur de développement local
+
+paths:
+  /pose:
+    get:
+      summary: Récupérer les positions d'une stratégie
+      description: Retourne les informations de position pour une stratégie spécifique
+      parameters:
+        - name: strategy
+          in: query
+          description: Code de la stratégie (par défaut 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Positions de la stratégie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  last_update:
+                    type: string
+                    format: date-time
+                    description: Date de la dernière mise à jour
+                additionalProperties:
+                  type: object
+                  properties:
+                    in_execution:
+                      type: boolean
+                    entry_ts:
+                      type: string
+                      format: date-time
+                  additionalProperties: true
+              example:
+                last_update: "2024-01-15 10:30:00"
+                BTCUSDT-ETHUSDT:
+                  in_execution: false
+                  entry_ts: "2024-01-15 09:00:00"
+                  BTCUSDT:
+                    ref_price: 45000.0
+                    quantity: 0.5
+                  ETHUSDT:
+                    ref_price: 2500.0
+                    quantity: -5.0
+
+  /portfolio:
+    get:
+      summary: Récupérer le portefeuille consolidé
+      description: Retourne les positions combinées de toutes les stratégies actives avec leurs ratios
+      parameters:
+        - name: strategy
+          in: query
+          description: Paramètre non utilisé (pour compatibilité)
+          required: false
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Portefeuille consolidé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  last_update:
+                    type: string
+                    format: date-time
+                    description: Date de la dernière mise à jour
+                  positions:
+                    type: object
+                    additionalProperties:
+                      type: number
+                      format: float
+                    description: Ratios de positions par coin (positif = long, négatif = short)
+              example:
+                last_update: "2024-01-15 10:30:00"
+                positions:
+                  BTCUSDT: 0.35
+                  ETHUSDT: -0.25
+                  SOLUSDT: 0.15
+
+  /static/{file_path}:
+    get:
+      summary: Accéder aux fichiers statiques
+      description: Sert les fichiers depuis le répertoire output
+      parameters:
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Chemin du fichier dans le répertoire output
+      responses:
+        '200':
+          description: Fichier trouvé
+        '404':
+          description: Fichier non trouvé
