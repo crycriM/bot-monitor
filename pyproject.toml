@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bot-monitor"
+version = "0.1.0"
+description = "Monitoring utilities for automated trading bots."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.30",
+  "starlette>=0.37",
+  "aiofiles>=24.1",
+  "numpy>=2.1",
+  "pandas>=2.2",
+  "matplotlib>=3.8",
+  "numba>=0.60",
+  "PyYAML>=6.0",
+  "python-dotenv>=1.0"
+]
