@@ -21,8 +21,6 @@ info:
 servers:
   - url: http://localhost:14440
     description: Development server
-  - url: https://api.trading-system.com
-    description: Production server
 
 paths:
   /pose:
