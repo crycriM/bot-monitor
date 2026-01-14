@@ -1,22 +1,28 @@
-[build-system]
-requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "bot-monitor"
 version = "0.1.0"
 description = "Monitoring utilities for automated trading bots."
+authors = ["Your Name <your@email.com>"]
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-  "fastapi>=0.110",
-  "uvicorn[standard]>=0.30",
-  "starlette>=0.37",
-  "aiofiles>=24.1",
-  "numpy>=2.1",
-  "pandas>=2.2",
-  "matplotlib>=3.8",
-  "numba>=0.60",
-  "PyYAML>=6.0",
-  "python-dotenv>=1.0"
-]
+packages = [{ include = "src" }]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+fastapi = "^0.110"
+uvicorn = {extras = ["standard"], version = "^0.30"}
+starlette = "^0.37"
+aiofiles = "^24.1"
+numpy = "^2.1"
+pandas = "^2.2"
+matplotlib = "^3.8"
+numba = "^0.60"
+PyYAML = "^6.0"
+python-dotenv = "^1.0"
+pywebio = "^1.8"
+requests = "^2.31"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
