@@ -41,7 +41,6 @@ app = None
 
 SignalType = Enum('SignalType', [('STOP', 'stop'),
                                  ('REFRESH', 'refresh'),
-                                 ('MATCHING', 'check_matching'),
                                  ('CHECKALL', 'check_all'),
                                  ('FILE', 'update_file'),
                                  ('PRICE_UPDATE', 'update_prices')])
@@ -817,6 +816,7 @@ class Processor:
     async def check_all(self):
         message = []
 
+        # checking pnl
         for session, params in self.session_configs.items():
             strategies = params['strategy']
 
@@ -827,38 +827,72 @@ class Processor:
                     pnl_2d = pnl_dict.get('perfcum', {}).get('002d', 0.0)
                     if pnl_2d < -0.05 and self.processor_config[session].get('check_pnl'):
                         message += [f'2day PnL < -5% for {strategy_name}@{session}']
-
+        # checking matching using precomputed DataFrame
         for session, matching_dict in self.matching.items():
-            for account, matching in matching_dict.items():
-                logging.info(f'checking {session}:{account}')
+            for account_key, matching_df in matching_dict.items():
+                logging.info(f'checking {session}:{account_key}')
                 try:
-                    # keep non dust
-
-
-
-                    if n_short != n_long and 'spot' not in session:
-                        message += [f'{strat}@{session}: Theo pos imbalance']
-
-                    if not self.processor_config[session].get('check_realpose'):
+                    if matching_df.empty:
                         continue
 
-                    if np.abs(matching.loc['Total', 'current']) > (seuil_theo * total_factor):
-                        message += [f'{strat}@{session}: Residual theo expo too large']
+                    # Calculate thresholds based on significant positions
+                    theo_positions = matching_df['theo'].dropna()
+                    real_positions = matching_df['real'].dropna()
 
-                    # checking positions mismatch
-                    if significant_theo != significant_current:
-                        d = significant_theo.difference(significant_current)
-                        if len(d) > 0:
-                            message += [f'Discrepancy {strat}@{session}: {d} have no pose in exchange account but should']
-                        d = significant_current.difference(significant_theo)
-                        if len(d) > 0:
-                            message += [f'Discrepancy {strat}@{session}: {d} have pose in account but not in DB']
+                    if len(theo_positions) == 0 and len(real_positions) == 0:
+                        continue
 
-                    # test de l'expo
-                    if np.abs(matching.loc['Total', 'current']) > (seuil_current * total_factor):
-                        message += [f'{strat}@{session}: Residual expo too large']
+                    seuil_theo = theo_positions.abs().max() / 5 if len(theo_positions) > 0 else 0
+                    seuil_current = real_positions.abs().max() / 5 if len(real_positions) > 0 else 0
+                    total_factor = 3  # Default factor for threshold multiplication
+
+                    # Filter significant positions
+                    significant_theo = set(matching_df[matching_df['theo'].abs() > seuil_theo].index)
+                    significant_current = set(matching_df[matching_df['real'].abs() > seuil_current].index)
+
+                    # Count long/short positions for balance check
+                    n_long_theo = len(matching_df[(matching_df['theo'].abs() > seuil_theo) & (matching_df['theo'] > 0)])
+                    n_short_theo = len(matching_df[(matching_df['theo'].abs() > seuil_theo) & (matching_df['theo'] < 0)])
+
+                    # Check position balance (skip for spot sessions)
+                    if n_short_theo != n_long_theo and 'spot' not in session:
+                        message += [f'{account_key}@{session}: Theo pos imbalance (Long: {n_long_theo}, Short: {n_short_theo})']
+
+                    if not self.processor_config[session].get('check_realpose', True):
+                        continue
+
+                    # Check residual theo exposure
+                    total_theo_expo = matching_df['theo'].sum()
+                    if abs(total_theo_expo) > (seuil_theo * total_factor):
+                        message += [f'{account_key}@{session}: Residual theo expo too large ({total_theo_expo:.2f})']
+
+                    # Check residual account exposure
+                    total_current_expo = matching_df['real'].sum()
+                    if abs(total_current_expo) > (seuil_current * total_factor):
+                        message += [f'{account_key}@{session}: Residual account expo too large ({total_current_expo:.2f})']
+
+                    # Check position mismatches for significant positions
+                    mismatched_positions = matching_df[matching_df['is_mismatch'] == True]
+                    if len(mismatched_positions) > 0:
+                        for coin in mismatched_positions.index:
+                            real_pos = mismatched_positions.loc[coin, 'real']
+                            theo_pos = mismatched_positions.loc[coin, 'theo']
+                            rel_delta = mismatched_positions.loc[coin, 'rel_delta']
+                            message += [f'{account_key}@{session}: Position mismatch for {coin} - Real: {real_pos:.2f}, Theo: {theo_pos:.2f}, Rel delta: {rel_delta:.2%}']
+
+                    # Check for positions that should exist but don't
+                    theo_only = significant_theo.difference(significant_current)
+                    if len(theo_only) > 0:
+                        message += [f'Discrepancy {account_key}@{session}: {theo_only} have no position in exchange account but should']
+
+                    # Check for positions that exist but shouldn't
+                    current_only = significant_current.difference(significant_theo)
+                    if len(current_only) > 0:
+                        message += [f'Discrepancy {account_key}@{session}: {current_only} have position in account but not in theo']
+
                 except Exception as e:
-                    logging.error(f'Exception {e.args[0]} during check of {strat}@{session}')
+                    logging.error(f'Exception {e.args[0]} during check of {account_key}@{session}')
+                    logging.error(traceback.format_exc())
 
         return message
 
@@ -1162,12 +1196,9 @@ def runner(event, processor, pace):
             if item == SignalType.REFRESH:
                 task = asyncio.create_task(refresh(with_matching=True))
                 task.add_done_callback(lambda _: task_queue.task_done())
-            # elif item == SignalType.CHECKALL:
-            #     task = asyncio.create_task(check(processor.check_all()))
-            #     task.add_done_callback(lambda _: task_queue.task_done())
-            # elif item == SignalType.MATCHING:
-            #     task = asyncio.create_task(check(processor.check_matching()))
-            #     task.add_done_callback(lambda _: task_queue.task_done())
+            elif item == SignalType.CHECKALL:
+                task = asyncio.create_task(check(processor.check_all()))
+                task.add_done_callback(lambda _: task_queue.task_done())
             elif item == SignalType.PRICE_UPDATE:
                 task = asyncio.create_task(check(processor.refresh_quotes()))
                 task.add_done_callback(lambda _: task_queue.task_done())

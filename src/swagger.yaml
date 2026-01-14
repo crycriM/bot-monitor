@@ -1,108 +1,398 @@
 openapi: 3.0.3
 info:
-  title: EDO Processor API
-  description: API pour gérer et surveiller les stratégies de trading
+  title: Web Processors Trading API
+  description: |
+    API for managing trading strategies, positions, and performance monitoring across multiple exchanges.
+    
+    This API provides endpoints to:
+    - Monitor trading positions across different exchanges and accounts
+    - Track strategy performance and PnL
+    - Check position matching between theoretical and actual positions
+    - Execute position multiplication operations
+    - Access real-time trading data and alerts
   version: 1.0.0
+  contact:
+    name: Trading System Support
+    email: support@trading-system.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
 servers:
-  - url: http://localhost:14040
-    description: Serveur de développement local
+  - url: http://localhost:14440
+    description: Development server
+  - url: https://api.trading-system.com
+    description: Production server
 
 paths:
   /pose:
     get:
-      summary: Récupérer les positions d'une stratégie
-      description: Retourne les informations de position pour une stratégie spécifique
+      summary: Get account positions
+      description: Retrieve current positions for a specific exchange and account
+      tags:
+        - Positions
       parameters:
-        - name: strategy
+        - name: exchange
           in: query
-          description: Code de la stratégie (par défaut 1)
           required: false
           schema:
-            type: integer
-            default: 1
+            type: string
+            default: okx
+            enum: [okx, binance, binancefut, bybit, bitget, hyperliquid]
+          description: Exchange name
+        - name: account
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "1"
+          description: Account identifier
       responses:
         '200':
-          description: Positions de la stratégie
+          description: Successful response with position data
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  last_update:
-                    type: string
-                    format: date-time
-                    description: Date de la dernière mise à jour
-                additionalProperties:
-                  type: object
-                  properties:
-                    in_execution:
-                      type: boolean
-                    entry_ts:
-                      type: string
-                      format: date-time
-                  additionalProperties: true
-              example:
-                last_update: "2024-01-15 10:30:00"
-                BTCUSDT-ETHUSDT:
-                  in_execution: false
-                  entry_ts: "2024-01-15 09:00:00"
-                  BTCUSDT:
-                    ref_price: 45000.0
-                    quantity: 0.5
-                  ETHUSDT:
-                    ref_price: 2500.0
-                    quantity: -5.0
-
-  /portfolio:
-    get:
-      summary: Récupérer le portefeuille consolidé
-      description: Retourne les positions combinées de toutes les stratégies actives avec leurs ratios
-      parameters:
-        - name: strategy
-          in: query
-          description: Paramètre non utilisé (pour compatibilité)
-          required: false
-          schema:
-            type: integer
-            default: 1
-      responses:
-        '200':
-          description: Portefeuille consolidé
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  last_update:
-                    type: string
-                    format: date-time
-                    description: Date de la dernière mise à jour
-                  positions:
+                  pose:
                     type: object
                     additionalProperties:
-                      type: number
-                      format: float
-                    description: Ratios de positions par coin (positif = long, négatif = short)
-              example:
-                last_update: "2024-01-15 10:30:00"
-                positions:
-                  BTCUSDT: 0.35
-                  ETHUSDT: -0.25
-                  SOLUSDT: 0.15
+                      $ref: '#/components/schemas/Position'
+                  USDT free:
+                    type: number
+                    format: float
+                    description: Free USDT balance
+                  USDT total:
+                    type: number
+                    format: float
+                    description: Total USDT balance
+        '404':
+          description: Exchange or account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
-  /static/{file_path}:
+  /multiply:
     get:
-      summary: Accéder aux fichiers statiques
-      description: Sert les fichiers depuis le répertoire output
+      summary: Multiply positions
+      description: Scale all positions in an account by a given factor
+      tags:
+        - Trading Operations
       parameters:
-        - name: file_path
-          in: path
+        - name: exchange
+          in: query
           required: true
           schema:
             type: string
-          description: Chemin du fichier dans le répertoire output
+            enum: [okx, binance, binancefut, bybit, bitget, hyperliquid]
+          description: Exchange name
+        - name: account
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Account identifier
+        - name: factor
+          in: query
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            maximum: 2
+            default: 1.0
+          description: Multiplication factor (0-2)
       responses:
         '200':
-          description: Fichier trouvé
+          description: Position multiplication executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '403':
+          description: Forbidden factor value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
-          description: Fichier non trouvé
+          description: Exchange or account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /status:
+    get:
+      summary: Get system status
+      description: Retrieve current status of all trading strategies and sessions
+      tags:
+        - Monitoring
+      responses:
+        '200':
+          description: System status information
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/SessionStatus'
+
+  /pnl:
+    get:
+      summary: Get PnL data
+      description: Retrieve profit and loss data for all strategies
+      tags:
+        - Performance
+      responses:
+        '200':
+          description: PnL data for all strategies
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties:
+                    $ref: '#/components/schemas/PnLData'
+
+  /aum:
+    get:
+      summary: Get Assets Under Management
+      description: Retrieve AUM performance metrics and historical data
+      tags:
+        - Performance
+      responses:
+        '200':
+          description: AUM data with performance metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties:
+                    $ref: '#/components/schemas/AUMData'
+
+  /matching:
+    get:
+      summary: Get position matching data
+      description: Compare theoretical vs actual positions for a specific session and account
+      tags:
+        - Monitoring
+      parameters:
+        - name: session
+          in: query
+          required: false
+          schema:
+            type: string
+            default: binance
+          description: Trading session name
+        - name: account_key
+          in: query
+          required: false
+          schema:
+            type: string
+            default: bitget_2
+          description: Account key identifier
+      responses:
+        '200':
+          description: Position matching comparison data
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/MatchingData'
+                  - type: object
+                    properties:
+                      session:
+                        type: string
+                      account_key:
+                        type: string
+                      error:
+                        type: string
+
+components:
+  schemas:
+    Position:
+      type: object
+      properties:
+        entry_ts:
+          type: string
+          format: date-time
+          description: Entry timestamp
+        quantity:
+          type: number
+          format: float
+          description: Position quantity
+        ref_price:
+          type: number
+          format: float
+          description: Reference price
+        amount:
+          type: number
+          format: float
+          description: Position amount in base currency
+
+    SessionStatus:
+      type: object
+      properties:
+        exchange:
+          type: string
+          description: Exchange name
+        theo:
+          type: object
+          properties:
+            pairs:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/PairInfo'
+            coins:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/CoinInfo'
+
+    PairInfo:
+      type: object
+      properties:
+        in_execution:
+          type: boolean
+        target_qty:
+          type: number
+          format: float
+        target_price:
+          type: number
+          format: float
+
+    CoinInfo:
+      type: object
+      properties:
+        in_execution:
+          type: boolean
+        position:
+          type: number
+          format: float
+        amount:
+          type: number
+          format: float
+        entry_ts:
+          type: string
+          format: date-time
+
+    PnLData:
+      type: object
+      properties:
+        mean_theo:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Mean theoretical PnL over different periods
+        sum_theo:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Cumulative theoretical PnL over different periods
+        latent_theo:
+          type: number
+          format: float
+          description: Current latent theoretical return
+
+    AUMData:
+      type: object
+      properties:
+        vol:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Volatility over different periods
+        apr:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Annualized return over different periods
+        perfcum:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Cumulative performance over different periods
+        pnlcum:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Cumulative PnL over different periods
+        drawdawn:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          description: Maximum drawdown over different periods
+
+    MatchingData:
+      type: object
+      properties:
+        real:
+          type: number
+          format: float
+          description: Actual position
+        theo:
+          type: number
+          format: float
+          description: Theoretical position
+        price:
+          type: number
+          format: float
+          description: Current price
+        delta_qty:
+          type: number
+          format: float
+          description: Quantity difference
+        delta_amn:
+          type: number
+          format: float
+          description: Amount difference
+        rel_delta:
+          type: number
+          format: float
+          description: Relative difference
+        is_mismatch:
+          type: boolean
+          description: Whether position is mismatched
+        dust:
+          type: boolean
+          description: Whether position is considered dust
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+
+tags:
+  - name: Positions
+    description: Position management and retrieval
+  - name: Trading Operations
+    description: Trading execution operations
+  - name: Monitoring
+    description: System and strategy monitoring
+  - name: Performance
+    description: Performance metrics and analytics
+
+externalDocs:
+  description: Find out more about the Trading System
+  url: https://docs.trading-system.com
