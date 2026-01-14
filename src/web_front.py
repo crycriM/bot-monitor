@@ -13,13 +13,28 @@ from pywebio.input import slider
 from pywebio.session import info as session_info
 from pywebio.session import set_env
 
-GATEWAY = 'http://localhost:14441'
-
-
 from pywebio.output import put_datatable, JSFunction, output_register_callback
 from pywebio.utils import random_str
 
+CONFIG = None
+GATEWAY = None
+
+def initialize_globals(config_file: str, gw_port: int):
+    """Initialize global configuration variables."""
+    global CONFIG, GATEWAY
+
+    if not config_file:
+        raise ValueError("No config file provided. Use --config to specify the config file path.")
+
+    with open(config_file, 'r') as myfile:
+        CONFIG = yaml.load(myfile, Loader=yaml.FullLoader)
+
+    GATEWAY = f'http://localhost:{gw_port}'
+
 def get_any(upi, params):
+    if GATEWAY is None:
+        raise RuntimeError("GATEWAY not initialized. Call initialize_globals() first.")
+
     response = requests.get(upi, params=params)
     return response
 
@@ -316,10 +331,9 @@ def multistrategy_matching_req(account):
             index=False
         ))
 
-
-
 def main():
-    global CONFIG
+    if CONFIG is None:
+        raise RuntimeError("CONFIG not initialized. Call initialize_globals() first.")
     session_config = CONFIG['session']
     config_files = {exchange: session_config[exchange]['config_file'] for exchange in session_config}
 
@@ -427,15 +441,12 @@ def main():
 
 if __name__ == '__main__':
     global CONFIG
+    global GATEWAY
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="input file", default='')
+    parser.add_argument("--port", help="port", default=8880)
+    parser.add_argument("--gw_port", help="gateway port", default=14440)
     args = parser.parse_args()
-    config_file = args.config
-
-    if config_file != '':
-        with open(config_file, 'r') as myfile:
-            CONFIG = yaml.load(myfile, Loader=yaml.FullLoader)
-    else:
-        raise ValueError("No config file provided. Use --config to specify the config file path.")
-    start_server(main, debug=True, port=8881)
+    initialize_globals(args.config, int(args.gw_port))
+    start_server(main, debug=True, port=int(args.port))
     set_env(title='Tartineur furtif', output_animation=False)
