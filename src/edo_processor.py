@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 import uvicorn
 
-from datafeed.utils_online import parse_pair, utc_ize
+from shared_utils.online import parse_pair, utc_ize
 
 global app
 STOP = 'stop'
