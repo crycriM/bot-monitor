@@ -17,8 +17,6 @@ import typing
 
 from datetime import datetime, timedelta
 
-from numba.np.math.numbers import real_divmod
-
 try:
     from datetime import UTC
 except:
@@ -39,7 +37,7 @@ from microservice.web_broker import WebSpreaderBroker
 from microservice.reporting.bot_reporting import TGMessenger
 # from data_analyzer.position_comparator import compare_positions
 
-global app
+app = None
 
 SignalType = Enum('SignalType', [('STOP', 'stop'),
                                  ('REFRESH', 'refresh'),
