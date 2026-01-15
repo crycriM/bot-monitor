@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 import uvicorn
+from pathlib import Path
 
 from shared_utils.online import parse_pair, utc_ize
 
@@ -32,8 +33,8 @@ class Processor:
         self.summary = {}
         self.portfolio = {}
         self.killswitch = {}
-        killswitch_state_file = self.params['state_file']
-        if os.path.exists(killswitch_state_file):
+        killswitch_state_file = Path(self.params['state_file']).expanduser()
+        if killswitch_state_file.exists():
             try:
                 with open(killswitch_state_file, 'r') as myfile:
                     self.killswitch_state = json.load(myfile)
@@ -49,13 +50,13 @@ class Processor:
 
     def refresh(self):
         self.summary = {}
-        working_directory = self.params['working_directory']
-        hearbeat_file = self.params['heartbeat']
+        working_directory = Path(self.params['working_directory']).expanduser()
+        hearbeat_file = Path(self.params['heartbeat']).expanduser()
         strategies = self.params['strategies']
 
         last_modif = None
-        killswitchfile = self.params['killswitch']
-        if os.path.exists(killswitchfile):
+        killswitchfile = Path(self.params['killswitch']).expanduser()
+        if killswitchfile.exists():
             try:
                 with open(killswitchfile, 'r') as myfile:
                     self.killswitch = json.load(myfile)
@@ -63,7 +64,7 @@ class Processor:
                 LOGGER.error(f'Error reading killswitch file {killswitchfile}: {e}')
                 self.killswitch = {}
 
-        if os.path.exists(hearbeat_file):
+        if hearbeat_file.exists():
             last_modif = utc_ize(os.path.getmtime(hearbeat_file))
         self.summary = {'last_update': str(last_modif)}
 
@@ -82,9 +83,9 @@ class Processor:
                 LOGGER.info(f'Strategy {strategy_name} is stopped or on hold, skipping')
                 self.summary[strategy_code] = {'last_update': self.summary.get('last_update', '')}
                 continue
-            strategy_directory = os.path.join(working_directory, strategy_name)
-            persistence_file = os.path.join(strategy_directory, strategy_param['persistence_file'])
-            if os.path.exists(persistence_file):
+            strategy_directory = working_directory / strategy_name
+            persistence_file = strategy_directory / strategy_param['persistence_file']
+            if persistence_file.exists():
                 with open(persistence_file, 'r') as myfile:
                     self.state = json.load(myfile)
             strat_summary = {}
