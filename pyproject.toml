@@ -21,6 +21,8 @@ PyYAML = "^6.0"
 python-dotenv = "^1.0"
 pywebio = "^1.8"
 requests = "^2.31"
+watchdog = "^3.0"
+nicegui = "^1.4"
 
 [build-system]
 requires = ["poetry-core"]
