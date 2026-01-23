@@ -1,75 +1,30 @@
 import json
-import sys
-import asyncio
-import aiofiles
-import threading
-import logging
-from logging.handlers import TimedRotatingFileHandler
 import os
-import base64
-from io import BytesIO
-from enum import Enum
-import argparse
-import traceback
-import yaml
-from math import isclose
-import typing
-
-from datetime import datetime, timedelta
-
-try:
-    from datetime import UTC
-except:
-    from datetime import timezone
-    UTC = timezone.utc
-from fastapi import FastAPI, HTTPException
-from starlette.responses import Response, BackgroundTask
-import uvicorn
-from dotenv import load_dotenv
-import numpy as np
+from datetime import datetime
+from pathlib import Path
+import logging
+import aiofiles
+import asyncio
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
+from math import isclose
+from datetime import timedelta, UTC
+import traceback
 
-from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file
+from src.utils_files import (
+    last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
+    generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
+    calculate_median_position_sizes, JSONResponse
+)
+from src.processors.file_watcher import FileWatcherManager
 from shared_utils.online import parse_pair, today_utc
-from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
+from datafeed.broker_handler import BrokerHandler
+from logging.handlers import TimedRotatingFileHandler
 from trading_bot.web_broker import WebSpreaderBroker
-from shared_utils.bot_reporting import TGMessenger
-# from data_analyzer.position_comparator import compare_positions
 
-app = None
+LOGGER = logging.getLogger('web_processor')
 
-SignalType = Enum('SignalType', [('STOP', 'stop'),
-                                 ('REFRESH', 'refresh'),
-                                 ('CHECKALL', 'check_all'),
-                                 ('FILE', 'update_file'),
-                                 ('PRICE_UPDATE', 'update_prices')])
-
-
-class JSONResponse(Response):
-    media_type = "application/json"
-
-    def __init__(
-        self,
-        content: typing.Any,
-        status_code: int = 200,
-        headers: typing.Mapping[str, str] | None = None,
-        media_type: str | None = None,
-        background: BackgroundTask | None = None,
-    ) -> None:
-        super().__init__(content, status_code, headers, media_type, background)
-
-    def render(self, content: typing.Any) -> bytes:
-        return json.dumps(
-            content,
-            ensure_ascii=False,
-            allow_nan=True,
-            indent=None,
-            separators=(",", ":"),
-        ).encode("utf-8")
-
-
-class Processor:
+class WebProcessor:
     '''
     Responsibility: interface between web query and strat status and commands
     trigger a refresh of pairs (todo)
@@ -122,6 +77,15 @@ class Processor:
         self.account_real_pos = {}
         self.perimeters = {}
         self.quotes = {}
+
+        # Attributes for position_comparator
+        self.price_cache = {}
+        self.median_position_sizes = {}
+        self.mismatch_start_times = {}
+
+        # File watching infrastructure - use FileWatcherManager
+        self.file_watcher = FileWatcherManager()
+
         self._init_accounts_by_strat()
 
     def _init_accounts_by_strat(self):
@@ -155,6 +119,26 @@ class Processor:
             logging.error(traceback.format_exc())
             self.used_accounts = {}
         logging.info(f'Built account dict {self.used_accounts}')
+
+    def build_watched_files_registry(self):
+        """Delegate to FileWatcherManager"""
+        return self.file_watcher.build_watched_files_registry(
+            self.session_configs,
+            self.processor_config,
+            self.used_accounts
+        )
+
+    def start_file_watchers(self, loop, task_queue):
+        """Delegate to FileWatcherManager"""
+        self.file_watcher.start_file_watchers(loop, task_queue)
+
+    def stop_file_watchers(self):
+        """Delegate to FileWatcherManager"""
+        self.file_watcher.stop_file_watchers()
+
+    def validate_file_watchers(self):
+        """Delegate to FileWatcherManager"""
+        return self.file_watcher.validate_file_watchers()
 
     def update_account_multi(self):
         """
@@ -215,6 +199,12 @@ class Processor:
                 logging.info(f'Added {len(theo_pos_data)} coins from theo pos file to perimeter for {session} {key}')
                 self.perimeters[session].update(set(real_pos_data.keys()))
                 logging.info(f'Updated with real pos, perimeter is now  {len(self.perimeters[session])} coins for {session} {key}')
+
+        # Calculate median position sizes for each account (needed by position_comparator)
+        self.median_position_sizes = calculate_median_position_sizes(
+            self.account_theo_pos, self.quotes)
+        for account_key, size in self.median_position_sizes.items():
+            logging.info(f'Median position size for {account_key}: {size:.2f}')
         return
 
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
@@ -321,6 +311,14 @@ class Processor:
             logging.info(f'{len(quotes)} quotes ready for session {session}')
 
             self.quotes[session] = quotes
+
+            # Populate price_cache for position_comparator
+            if session not in self.price_cache:
+                self.price_cache[session] = {}
+            for coin, price in quotes.items():
+                if price is not None:
+                    self.price_cache[session][coin] = {'price': price}
+
         except Exception as e:
             self.quotes[session] = {}
             logging.error(f'Error fetching quotes for session {session}: {e.args[0]}')
@@ -376,11 +374,11 @@ class Processor:
                     if is_live:
                         logging.info(f'session {session} account {account} is live')
                         real_pnl_dict.update({'vol': {},
-                                         'apr': {},
-                                         'perfcum': {},
-                                         'pnlcum': {},
-                                         'drawdawn': {}
-                                         })
+                                              'apr': {},
+                                              'perfcum': {},
+                                              'pnlcum': {},
+                                              'drawdawn': {}
+                                              })
                     else:
                         logging.info(f'session {session} account {account} is not live with data {extract}')
                 except Exception as e:
@@ -420,6 +418,7 @@ class Processor:
                             real_pnl_dict['apr'].update({f'{day:03d}d': apr})
                             real_pnl_dict['perfcum'].update({f'{day:03d}d': pc})
                             real_pnl_dict['drawdawn'].update({f'{day:03d}d': dd})
+                            no_graph = False
                         except:
                             real_pnl_dict['pnlcum'].update({f'{day:03d}d': 0})
                             real_pnl_dict['vol'].update({f'{day:03d}d': 0})
@@ -427,67 +426,28 @@ class Processor:
                             real_pnl_dict['perfcum'].update({f'{day:03d}d': 0})
                             real_pnl_dict['drawdawn'].update({f'{day:03d}d': 0})
                             logging.error(f'Error in aum data for strat {account_key} for day {day}')
+                            no_graph = True
 
-                        if day == 180:
+                        if day == 180 and not no_graph:
                             logging.info(f'Generating graph for {session}-{account_key}')
-                            fig, ax = plt.subplots()
-                            ax.plot(perfcum.index, perfcum.values)
-                            ax.set_xlabel('date')
-                            ax.set_ylabel('Cum perf')
-                            ax.set_title(f'{session}-{account_key}')
-                            ax.grid()
-                            for tick in ax.get_xticklabels():
-                                tick.set_rotation(45)
-                            ax.legend()
-                            tmpfile = BytesIO()
-                            fig.savefig(tmpfile, format='png')
-                            encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-                            html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
+                            html = generate_perf_chart(perfcum, session, account_key)
                             filename = f'temp/{session}_{account_key}_fig1.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
 
-                            plt.close()
-
-                            fig, ax = plt.subplots()
-                            ax.plot(pnlcum.index, pnlcum.values)
-                            ax.set_xlabel('date')
-                            ax.set_ylabel('Cum pnl')
-                            ax.set_title(f'{session}-{account_key}')
-                            ax.grid()
-                            for tick in ax.get_xticklabels():
-                                tick.set_rotation(45)
-                            ax.legend()
-                            tmpfile = BytesIO()
-                            fig.savefig(tmpfile, format='png')
-                            encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-                            html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
+                            html = generate_pnl_chart(pnlcum, session, account_key)
                             filename = f'temp/{session}_{account_key}_fig2.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
-                            plt.close()
 
-                        elif day == 30:
+                        elif day == 30 and not no_graph:
                             daily = last_aum['perf'].resample('1d').sum()
-                            fig, ax = plt.subplots()
-                            ax.bar(x=daily.index, height=daily.values, color=daily.apply(lambda x:'red' if x<0 else 'green'))
-                            ax.set_xlabel('date')
-                            ax.set_ylabel('Daily perf')
-                            ax.set_title(f'{session}-{account_key}')
-                            ax.grid()
-                            for tick in ax.get_xticklabels():
-                                tick.set_rotation(45)
-                            tmpfile = BytesIO()
-                            fig.savefig(tmpfile, format='png')
-                            encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-                            html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
+                            html = generate_daily_perf_chart(daily, session, account_key)
                             filename = f'temp/{session}_{account_key}_fig3.html'
-
                             with open(filename, 'w') as f:
                                 f.write(html)
-                            plt.close()
                     if session not in self.aum:
                         self.aum[session] = {}
                     self.aum[session][account_key] = real_pnl_dict
@@ -544,13 +504,13 @@ class Processor:
                         last_cum[day] = 0
 
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': last[day] for day in days},
-                            'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
+                                 'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
                 pnl_dict['latent_theo']['strategy_type'] = strategy_type
             except:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
-                            'sum_theo': {f'{day:03d}d': 0 for day in days}})
+                                 'sum_theo': {f'{day:03d}d': 0 for day in days}})
                 logging.error(f'Error in pnl file {pnl_file} for strat {strategy_name}')
 
             try:
@@ -732,7 +692,6 @@ class Processor:
         except Exception as e:
             logging.info(f'Exception {e.args[0]} for account {session}.{strategy_name}')
 
-
     async def check_latent(self):
         message = []
         for session, params in self.session_configs.items():
@@ -749,7 +708,7 @@ class Processor:
                         if np.isnan(latent_pnl) or np.isinf(latent_pnl):
                             latent_pnl = 0
                         logging.info(f'checking latent for {session}:{strategy_name}, found {latent_return}, {latent_pnl}')
-                        if latent_return < -0.04 and self.session_config[session].get('check_latent'):
+                        if latent_return < -0.04 and self.processor_config[session].get('check_latent'):
                             message += [f'Latent return < -4% for {strategy_name}@{session}']
         return message
 
@@ -764,7 +723,7 @@ class Processor:
                 if age_seconds > 180:
                     if self.processor_config[exchange].get('check_running'):
                         message += [
-                        f'Heartbeat {heartbeat_file} of {exchange} unchanged for {int(age_seconds / 60)} minutes']
+                            f'Heartbeat {heartbeat_file} of {exchange} unchanged for {int(age_seconds / 60)} minutes']
             else:
                 if self.processor_config[exchange].get('check_running'):
                     message += [f'No file {heartbeat_file} ']
@@ -937,7 +896,7 @@ class Processor:
 
     def get_matching(self, session, account_key):
         if session not in self.processor_config:
-                return f'Exchange not found: try {list(self.processor_config.keys())} and account key'
+            return f'Exchange not found: try {list(self.processor_config.keys())} and account key'
         if self.matching is None:
             return {}
         if session in self.matching and account_key in self.matching[session]:
@@ -1044,189 +1003,9 @@ class Processor:
             target = np.abs(target)
 
             response = await broker.send_simple_order(order_id, coin=coin, action=action, price=None, target_quantity=target,
-                                       comment=comment, nature=nature,
-                                       translate_qty_incontracts=False, use_algo=True)
+                                                      comment=comment, nature=nature,
+                                                      translate_qty_incontracts=False, use_algo=True)
             await asyncio.sleep(5)
 
         return response
 
-def runner(event, processor, pace):
-    async def run_web_processor():
-        uvicorn_error = logging.getLogger("uvicorn.error")
-        uvicorn_error.disabled = True
-        uvicorn_access = logging.getLogger("uvicorn.access")
-        uvicorn_access.disabled = True
-        global app
-        app = FastAPI()
-
-        # app.mount('/static', StaticFiles(directory='static', html=True), name='static')
-
-        @app.get('/pose')
-        async def read_position(exchange: str = 'okx', account: str = '1'):
-            if exchange not in WebSpreaderBroker.ACCOUNT_DICT:
-                raise HTTPException(status_code=404, detail=f'Exchange not found: '
-                                                            f'try {list(WebSpreaderBroker.ACCOUNT_DICT.keys())}')
-            if account not in WebSpreaderBroker.ACCOUNT_DICT[exchange]:
-                raise HTTPException(status_code=404, detail=f'Account not found: '
-                                                            f'try {list(WebSpreaderBroker.ACCOUNT_DICT[exchange].keys())}')
-            report = await processor.get_account_position(exchange, account)
-            return JSONResponse(report)
-
-        @app.get('/multiply')
-        async def multiply(exchange: str = '', account: str = '', factor=1.0):
-            if exchange not in WebSpreaderBroker.ACCOUNT_DICT:
-                raise HTTPException(status_code=404, detail=f'Exchange not found: '
-                                                            f'try {list(WebSpreaderBroker.ACCOUNT_DICT.keys())}')
-            if len(account) == 1:
-                account = int(account)
-            if account not in WebSpreaderBroker.ACCOUNT_DICT[exchange]:
-                raise HTTPException(status_code=404, detail=f'Account not found: '
-                                                            f'try {list(WebSpreaderBroker.ACCOUNT_DICT[exchange].keys())}')
-            factor = float(factor)
-            if factor < 0 or factor > 2:
-                raise HTTPException(status_code=403, detail='Forbidden value: try between 0 and 2')
-            report = await processor.multiply(exchange, account, factor)
-            return JSONResponse(report)
-
-        @app.get('/dashboard')
-        async def read_dashboard(session: str = 'bitget'):
-            report = processor.get_dashboard(session=session)
-            return JSONResponse(report)
-
-        @app.get('/status')
-        async def read_status():
-            report = processor.get_status()
-            return JSONResponse(report)
-
-        @app.get('/pnl')
-        async def read_pnl():
-            report = processor.get_pnl()
-            return JSONResponse(report)
-
-        @app.get('/aum')
-        async def read_aum():
-            report = processor.get_aum()
-            return JSONResponse(report)
-
-        @app.get('/matching')
-        async def read_matching(session: str = 'binance', account_key: str = 'bitget_2'):
-            report = processor.get_matching(session, account_key)
-            try:
-                return JSONResponse(report.to_dict(orient='index'))
-            except Exception as e:
-                return JSONResponse({'session': session,
-                                     'account_key': account_key,
-                                     'error': e.args[0]})
-            # if isinstance(report, pd.DataFrame):
-            #     return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
-            #                                                    'theo': lambda x: f'{x:.0f}',
-            #                                                    'real': lambda x: f'{x:.0f}',
-            #                                                    }))
-            # else:
-            #     if report is not None:
-            #     else:
-            #         return HTMLResponse('N/A')
-
-        config = uvicorn.Config(app, port=14441, host='0.0.0.0', lifespan='on')
-        server = uvicorn.Server(config)
-        await server.serve()
-
-    async def heartbeat(queue, pace, action):
-        while True:
-            await queue.put(action)
-            await asyncio.sleep(pace)
-
-    async def watch_file_modifications(queue):
-        last_mod_times = {session: os.path.getmtime(file_path) for session, file_path in processor.config_files.items()}
-        while True:
-            await asyncio.sleep(10)
-            for session, file_path in processor.config_files.items():
-                current_mod_time = os.path.getmtime(file_path)
-                if current_mod_time != last_mod_times[session]:
-                    last_mod_times[session] = current_mod_time
-                    await queue.put((SignalType.FILE, session, file_path))
-
-    async def refresh(with_matching):
-        await processor.refresh(with_matching)
-
-    async def refresh_quotes():
-        await processor.refresh_quotes()
-
-    async def send_alert(message):
-        if message is not None:
-            for error in message:
-                TGMessenger.send(error, 'CM')
-            logging.info(f'Sent {len(message)} msg')
-
-    async def check(checking_coro):
-        messages = await checking_coro
-
-        await send_alert(messages)
-
-    async def main():
-        event.loop = asyncio.get_event_loop()
-        event.queue = asyncio.Queue()
-        task_queue = asyncio.Queue()
-        await refresh(with_matching=False)  # first we initialize perimeters
-        await refresh_quotes()
-        event.set()
-        web_runner = asyncio.create_task(run_web_processor())
-        heart_runner = asyncio.create_task(heartbeat(task_queue, pace['REFRESH'], SignalType.REFRESH))
-        running_runner = asyncio.create_task(heartbeat(task_queue, pace['CHECK'], SignalType.CHECKALL))
-        match_runner = asyncio.create_task(heartbeat(task_queue, pace['MATCHING'], SignalType.MATCHING))
-        quote_runner = asyncio.create_task(heartbeat(task_queue, pace['PRICE_UPDATE'], SignalType.PRICE_UPDATE))
-        file_watcher = asyncio.create_task(watch_file_modifications(task_queue))
-
-        while True:
-            item = await task_queue.get()
-            if item == SignalType.STOP:
-                task_queue.task_done()
-                break
-            if item == SignalType.REFRESH:
-                task = asyncio.create_task(refresh(with_matching=True))
-                task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.CHECKALL:
-                task = asyncio.create_task(check(processor.check_all()))
-                task.add_done_callback(lambda _: task_queue.task_done())
-            elif item == SignalType.PRICE_UPDATE:
-                task = asyncio.create_task(check(processor.refresh_quotes()))
-                task.add_done_callback(lambda _: task_queue.task_done())
-            elif isinstance(item, tuple) and item[0] == SignalType.FILE:
-                await processor.update_config(item[1], item[2])
-                task_queue.task_done()
-        web_runner.cancel()
-        heart_runner.cancel()
-        match_runner.cancel()
-        quote_runner.cancel()
-        running_runner.cancel()
-        file_watcher.cancel()
-        await task_queue.join()
-
-    asyncio.run(main())
-
-
-if __name__ == '__main__':
-    load_dotenv()
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", help="input file", default='')
-    args = parser.parse_args()
-    config_file = args.config
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    if config_file != '':
-        with open(config_file, 'r') as myfile:
-            config = yaml.load(myfile, Loader=yaml.FullLoader)
-    else:
-        config = {}
-
-    pace = config.get('pace', {'REFRESH': 180, 'MATCHING': 60, 'PRICE_UPDATE': 600, 'RUNNING': 300})
-    started = threading.Event()
-    processor = Processor(config)
-    th = threading.Thread(target=runner, args=(started, processor, pace,))
-    logging.info('Starting')
-    th.start()
-    started.wait()
-    logging.info('Started')
-    th.join()
-    logging.info('Stopped')
