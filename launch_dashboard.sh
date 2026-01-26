@@ -1,8 +1,12 @@
 #!/bin/bash
 # Launch script for dashboard and/or backend (NiceGUI or Streamlit)
 
+# Python env
+source /home/ubuntu/.msenv/bin/activate
+
 # Configuration
-CONFIG_FILE="${CONFIG_FILE:-config/web_processor.yml}"
+EXE_DIR=/home/ubuntu/src/bot-monitor_new
+CONFIG_FILE="${CONFIG_FILE:-/home/ubuntu/config/web_processor.yml}"
 PORT="${PORT:-8880}"
 STREAMLIT_PORT="${STREAMLIT_PORT:-8880}"
 GW_PORT="${GW_PORT:-14440}"
@@ -64,7 +68,7 @@ if [ "$LAUNCH_BACKEND" = "yes" ]; then
     echo ""
     
     cd "$(dirname "$0")"
-    python src/web_api.py --config "$CONFIG_FILE" &
+    python $EXE_DIR/src/web_api.py --config "$CONFIG_FILE" &
     BACKEND_PID=$!
     echo "Backend started with PID: $BACKEND_PID"
     
@@ -110,7 +114,7 @@ if [ "$DASHBOARD" = "streamlit" ]; then
     echo "Open browser to: http://localhost:$STREAMLIT_PORT"
     echo ""
     
-    streamlit run src/web_front_sl.py \
+    streamlit run $EXE_DIR/src/web_front_sl.py \
         --server.port "$STREAMLIT_PORT" \
         --logger.level=info \
         -- --config "$CONFIG_FILE" --gw_port "$GW_PORT"
@@ -129,7 +133,7 @@ elif [ "$DASHBOARD" = "nicegui" ]; then
     echo "Open browser to: http://localhost:$PORT"
     echo ""
     
-    python src/web_front_new.py \
+    python $EXE_DIR/src/web_front_new.py \
         --config "$CONFIG_FILE" \
         --port "$PORT" \
         --gw_port "$GW_PORT"
