@@ -1,4 +1,4 @@
-working_directory: ../microservice_int/
+working_directory: ~/Python/github/microservice_aws3_int/
 pace:
   REFRESH: 180
   RUNNING: 600
@@ -7,11 +7,11 @@ pace:
   PRICE_UPDATE: 600
 session:
   binance:
-    config_file: ../microservice_aws3_int/config/config_pair_session_binbitget.json
-    config_position_matching_file: ../microservice_aws3_int/config/config_position_matching.json
+    config_file: ~/Python/github/data/ms_algo3/config/session_binance.json
+    config_position_matching_file: config/config_position_matching.json 
     check_running: true
     check_realpose: false
     check_pnl: false
-    session_file: ../microservice_aws3_int/output_bin/session.log
+    session_file: ~/Python/github/data/ms_algo3/output/binance/session.log
 
 

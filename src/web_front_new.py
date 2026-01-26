@@ -3,7 +3,9 @@ import argparse
 import yaml
 import json
 import requests
+import numpy as np
 import pandas as pd
+from pathlib import Path
 from nicegui import ui
 
 CONFIG = None
@@ -47,6 +49,18 @@ def dict_to_df(data_dict, mode=True):
         df = pd.DataFrame()
     return df
 
+def replace_na_with_nan(df):
+    '''Replace string 'N/A' with NaN in DataFrame.'''
+    return df.replace('N/A', np.nan)
+
+def clean_records(df):
+    '''Clean DataFrame '''
+    df = replace_na_with_nan(df)
+    df_reset = df.reset_index()
+    df_reset = df_reset.where(pd.notnull(df_reset), None)
+    df_records = df_reset.to_dict('records')
+
+    return df_records, df_reset.columns
 
 def multistrategy_matching_to_df(details_dict):
     '''
@@ -59,18 +73,19 @@ def multistrategy_matching_to_df(details_dict):
         main_df.reset_index(inplace=True)
         main_df.rename(columns={'index': 'token'}, inplace=True)
         main_df = main_df[['token', 'theo', 'real', 'price', 'dust', 'is_mismatch']]
+        main_df = replace_na_with_nan(main_df)        
 
         main_df['ref_price'] = main_df['price'].fillna(0.0)
         main_df['theo_qty'] = main_df['theo'].fillna(0)
-        main_df['theo_amount'] = (main_df['theo_qty'] * main_df['ref_price']).astype(int)
+        main_df['theo_amount'] = main_df['theo_qty'] * main_df['ref_price']
         main_df['real_qty'] = main_df['real'].fillna(0)
-        main_df['real_amount'] = (main_df['real_qty'] * main_df['ref_price']).astype(int)
+        main_df['real_amount'] = main_df['real_qty'] * main_df['ref_price']
         main_df['is_dust'] = main_df['dust'].fillna(False)
         main_df['is_mismatch'] = main_df['is_mismatch'].fillna(False)
 
         # Create summary DataFrame (includes all positions, even dust)
         summary_df = pd.DataFrame({
-            'Net Exposure': [int(main_df['theo_amount'].sum()), int(main_df['real_amount'].sum())],
+            'Net Exposure': [main_df['theo_amount'].sum(), main_df['real_amount'].sum()],
             'Gross Exposure': [int(main_df['theo_amount'].abs().sum()), int(main_df['real_amount'].abs().sum())]
         }, index=['Theo', 'Real'])
 
@@ -94,26 +109,32 @@ def get_used_accounts():
 
     session_config = CONFIG['session']
     config_files = {exchange: session_config[exchange]['config_file'] for exchange in session_config}
+    
+    print(f'DEBUG: config_files = {config_files}')  # <-- ADD THIS
 
     session_configs = {}
     used_accounts = {}
 
-    # Load all config files and extract active strategies
     for session, config_file in config_files.items():
-        if os.path.exists(config_file):
-            with open(config_file, 'r') as myfile:
+        filename = Path(config_file).expanduser()
+        if filename.exists():
+            with open(filename, 'r') as myfile:
                 params = json.load(myfile)
                 session_configs[session] = params
+        else:
+            print(f'DEBUG: Config file not found: {config_file}')  # <-- ADD THIS
 
-    # Populate accounts
     for session, session_params in session_configs.items():
         strategies = session_params['strategy']
+        print(f'DEBUG: {session} strategies: {list(strategies.keys())}')  # <-- ADD THIS
 
         for strategy_name, strategy_param in strategies.items():
             strat_account = strategy_param['account_trade']
             strat_exchange = strategy_param.get('exchange_trade', '')
             active = strategy_param.get('active', False)
             destination = strategy_param.get('send_orders', 'dummy')
+            
+            print(f'DEBUG: {strategy_name} -> active={active}, send_orders={destination}')  # <-- ADD THIS
 
             if not active or destination == 'dummy':
                 continue
@@ -121,14 +142,13 @@ def get_used_accounts():
                 used_accounts[session] = set()
             used_accounts[session].add((strat_exchange, strat_account))
 
-    # Convert to list of session:exchange_account strings
     account_list = []
     for session, accounts in used_accounts.items():
         for exchange, account in accounts:
             account_list.append(f'{session}:{exchange}_{account}')
 
+    print(f'DEBUG: Final account_list = {account_list}')  # <-- ADD THIS
     return sorted(account_list)
-
 
 def create_pnl_tab():
     '''Create the PnL tab with Get PnL button and results display.'''
@@ -165,11 +185,12 @@ def create_pnl_tab():
                     with ui.card().classes('w-full'):
                         ui.label('Mean Theoretical PnL').classes('text-h6')
                         # Convert DataFrame to dict for aggrid
-                        df_records = df.reset_index().to_dict('records')
+                        df_records, cols = clean_records(df)
                         ui.aggrid({
                             'columnDefs': [
-                                {'field': col, 'sortable': True, 'filter': True}
-                                for col in df.reset_index().columns
+                                {'field': col, 'sortable': True,
+                                 'filter': False if '0' in col or 'value' in col else 'agSetColumnFilter'}
+                                for col in cols
                             ],
                             'rowData': df_records,
                             'defaultColDef': {'resizable': True, 'flex': 1}
@@ -179,11 +200,12 @@ def create_pnl_tab():
 
                     with ui.card().classes('w-full'):
                         ui.label('Pivot Summary').classes('text-h6')
-                        pivot_records = pnl_pivot.reset_index().to_dict('records')
+                        pivot_records, cols = clean_records(pnl_pivot.reset_index())
                         ui.aggrid({
                             'columnDefs': [
-                                {'field': col, 'sortable': True, 'filter': True}
-                                for col in pnl_pivot.reset_index().columns
+                                {'field': col, 'sortable': True,
+                                 'filter': False if '0' in col or 'value' in col else 'agSetColumnFilter'}
+                                for col in cols
                             ],
                             'rowData': pivot_records,
                             'defaultColDef': {'resizable': True, 'flex': 1}
@@ -253,7 +275,7 @@ def create_matching_tab():
                 # Summary card
                 with ui.card().classes('w-full'):
                     ui.label('Exposure Summary').classes('text-h6')
-                    summary_records = summary_df.reset_index().to_dict('records')
+                    summary_records, cols = clean_records(summary_df)
                     ui.aggrid({
                         'columnDefs': [
                             {'field': 'index', 'headerName': '', 'sortable': False},
@@ -280,7 +302,7 @@ def create_matching_tab():
                         'theo_pos': [count_pos_th, count_neg_th],
                         'real_pos': [count_pos, count_neg],
                     }, index=['long#', 'short#'])
-                    tc_records = tc.reset_index().to_dict('records')
+                    tc_records, _ = clean_records(tc.reset_index())
                     ui.aggrid({
                         'columnDefs': [
                             {'field': 'index', 'headerName': 'Type', 'sortable': False},
@@ -299,7 +321,7 @@ def create_matching_tab():
                 if not mismatch.empty:
                     with ui.card().classes('w-full'):
                         ui.label('Mismatched Positions').classes('text-h6 text-orange')
-                        mismatch_records = mismatch.to_dict('records')
+                        mismatch_records, _ = clean_records(mismatch)
                         ui.aggrid({
                             'columnDefs': [
                                 {'field': 'token', 'headerName': 'Token', 'sortable': True, 'filter': True},
@@ -318,7 +340,7 @@ def create_matching_tab():
                 if not dust.empty:
                     with ui.card().classes('w-full'):
                         ui.label('Dust Positions').classes('text-h6')
-                        dust_records = dust.to_dict('records')
+                        dust_records, _ = clean_records(dust)
                         ui.aggrid({
                             'columnDefs': [
                                 {'field': 'token', 'headerName': 'Token', 'sortable': True, 'filter': True},
@@ -339,14 +361,14 @@ def create_matching_tab():
                         with open(figname, 'r') as figfile:
                             figure = figfile.read()
                             with ui.card().classes('w-full').style('min-height: 400px'):
-                                ui.html(figure)
+                                ui.html(figure, sanitize=False)
                         ui.space()
 
                 # All positions table
                 with ui.card().classes('w-full'):
                     ui.label('All Positions').classes('text-h6')
                     positions_df = main_df[['token', 'theo_amount', 'real_amount']]
-                    positions_records = positions_df.to_dict('records')
+                    positions_records, _ = clean_records(positions_df)
                     ui.aggrid({
                         'columnDefs': [
                             {'field': 'token', 'headerName': 'Token', 'sortable': True, 'filter': True, 'pinned': 'left'},

@@ -11,12 +11,12 @@ from math import isclose
 from datetime import timedelta, UTC
 import traceback
 
-from src.utils_files import (
+from utils_files import (
     last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
     generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
     calculate_median_position_sizes, JSONResponse
 )
-from src.processors.file_watcher import FileWatcherManager
+from .file_watcher import FileWatcherManager
 from shared_utils.online import parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler
 from logging.handlers import TimedRotatingFileHandler
@@ -34,8 +34,8 @@ class WebProcessor:
 
     def __init__(self, config):
         self.processor_config = config['session']
-        self.config_files = {session: self.processor_config[session]['config_file'] for session in self.processor_config}
-        self.config_position_matching_files = {session: self.processor_config[session]['config_position_matching_file'] for session in self.processor_config}
+        self.config_files = {session: Path(self.processor_config[session]['config_file']).expanduser() for session in self.processor_config}
+        self.config_position_matching_files = {session: Path(self.processor_config[session]['config_position_matching_file']).expanduser() for session in self.processor_config}
         fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
         handler = TimedRotatingFileHandler(filename='output/web_processor.log',
                                            when="midnight", interval=1, backupCount=7)
@@ -49,6 +49,7 @@ class WebProcessor:
                 logging.info(f'Reading session config {config_file}')
                 with open(config_file, 'r') as myfile:
                     params = json.load(myfile)
+                    params['working_directory'] = Path(params['working_directory']).expanduser()
                     self.session_configs[session] = params
             else:
                 logging.warning(f'No config file for {session} with name {config_file}')
@@ -170,8 +171,8 @@ class WebProcessor:
                 key = '_'.join((trade_exchange, account))
                 logging.info(f'Getting account positions for {key}')
                 working_directory = self.session_configs[session]['working_directory']
-                trade_account_dir = os.path.join(working_directory, key)
-                theo_pos_file = os.path.join(trade_account_dir, 'current_state_theo.pos')
+                trade_account_dir = working_directory / key
+                theo_pos_file = trade_account_dir / 'current_state_theo.pos'
 
                 if os.path.exists(theo_pos_file):
                     theo_pos_data = read_pos_file(theo_pos_file)
@@ -181,23 +182,25 @@ class WebProcessor:
                     theo_pos_data = {}
                 real_pos_data = {}
                 if trade_exchange != 'dummy':
-                    real_pos_file = os.path.join(trade_account_dir, 'current_state.pos')
+                    real_pos_file = trade_account_dir / 'current_state.pos'
                     if os.path.exists(real_pos_file):
                         real_pos_data = read_pos_file(real_pos_file)
                         logging.info(f'Found {len(real_pos_data)} real positions for {session} {key}')
                     else:
                         logging.warning(f'No real pos file {real_pos_file} for {session} {key}')
+                    self.account_real_pos[session][key] = real_pos_data.copy()
                 self.account_theo_pos[session][key] = theo_pos_data.copy()
-                self.account_real_pos[session][key] = real_pos_data.copy()
                 # # get account positions from exchange
                 # positions = await self.get_account_position(trade_exchange, account)
                 #
                 # if session not in self.account_positions:
                 #     self.account_positions[session] = {}
                 # self.account_positions[session][key] = positions
-                self.perimeters[session].update(set(theo_pos_data.keys()))
+                tickers = [name for name in set(theo_pos_data.keys()) if 'USD' in name]
+                self.perimeters[session].update(tickers)
                 logging.info(f'Added {len(theo_pos_data)} coins from theo pos file to perimeter for {session} {key}')
-                self.perimeters[session].update(set(real_pos_data.keys()))
+                tickers = [name for name in set(real_pos_data.keys()) if 'USD' in name]
+                self.perimeters[session].update(tickers)
                 logging.info(f'Updated with real pos, perimeter is now  {len(self.perimeters[session])} coins for {session} {key}')
 
         # Calculate median position sizes for each account (needed by position_comparator)
@@ -230,7 +233,7 @@ class WebProcessor:
         match['is_mismatch'] = is_mismatch & not_dust
         match['dust'] = (~not_dust) & is_mismatch
 
-        return match
+        return match.fillna('N/A')
 
     def do_matching(self, session):
         """
@@ -350,7 +353,7 @@ class WebProcessor:
                 account_list.append((trade_exchange, account_number))
         for account in account_list:
             account_key = '_'.join(account)
-            aum_file = os.path.join(working_directory, account_key, '_aum.csv')
+            aum_file = working_directory / account_key / '_aum.csv'
             if os.path.exists(aum_file):
                 try:
                     aum = await read_aum_file(aum_file, session)
@@ -457,23 +460,24 @@ class WebProcessor:
     async def update_pnl(self, session, working_directory, strategy_name, strategy_param):
         logging.info('updating pnl for %s, %s', session, strategy_name)
         now = today_utc()
-        strategy_directory = os.path.join(working_directory, strategy_name)
-        pnl_file = os.path.join(strategy_directory, 'pnl.csv')
-        latent_file = os.path.join(strategy_directory, 'latent_profit.csv')
+        strategy_directory = working_directory / strategy_name
+        pnl_file = strategy_directory / 'pnl.csv'
+        latent_file = strategy_directory / 'latent_profit.csv'
         strategy_type = self.strategy_types[session][strategy_name]
 
         days = [1, 2, 7, 30, 90, 180]
         last_date = {day: now - timedelta(days=day) for day in days}
-        pnl_dict = {}
+        pnl_dict = {'mean_theo': {}, 'sum_theo': {}}
 
         if os.path.exists(latent_file):
             try:
                 logging.info('reading latent file for %s, %s', session, strategy_name)
                 latent_result = await read_latent_file(latent_file)
-                pnl_dict.update({'latent_theo': latent_result['latent_return'].iloc[-1]})
+                pnl_dict['sum_theo']['latent_theo'] = latent_result['latent_return'].iloc[-1]
             except:
                 latent_result = pd.DataFrame()
                 logging.error(f'Error in latent file {latent_file} for strat {strategy_name}')
+                pnl_dict['sum_theo']['latent_theo'] = 0
             if session not in self.latent:
                 self.latent[session] = {strategy_name: latent_result}
             else:
@@ -507,10 +511,11 @@ class WebProcessor:
                                  'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
-                pnl_dict['latent_theo']['strategy_type'] = strategy_type
             except:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
                                  'sum_theo': {f'{day:03d}d': 0 for day in days}})
+                pnl_dict['mean_theo']['strategy_type'] = strategy_type
+                pnl_dict['sum_theo']['strategy_type'] = strategy_type
                 logging.error(f'Error in pnl file {pnl_file} for strat {strategy_name}')
 
             try:
@@ -530,8 +535,8 @@ class WebProcessor:
 
     async def update_summary(self, session, working_directory, strategy_name, strategy_param):
         try:
-            strategy_directory = os.path.join(working_directory, strategy_name)
-            persistence_file = os.path.join(strategy_directory, strategy_param['persistence_file'])
+            strategy_directory = working_directory / strategy_name
+            persistence_file = strategy_directory / strategy_param['persistence_file']
             items = ['exchange_trade',
                      'account_trade',
                      'type',
@@ -716,7 +721,7 @@ class WebProcessor:
         message = []
         # checking heartbeat
         for exchange, param_dict in self.processor_config.items():
-            heartbeat_file = param_dict['session_file']
+            heartbeat_file = Path(param_dict['session_file']).expanduser()
             age_seconds = last_modif(heartbeat_file)
 
             if age_seconds is not None:
@@ -731,7 +736,8 @@ class WebProcessor:
         # Generate killswitch signal
         for session, params in self.session_configs.items():
             strategies = params['strategy']
-            killswitchfile = self.processor_config[session].get('kill_switch', '')
+            killswitch_str = self.processor_config[session].get('kill_switch', '')
+            killswitchfile = Path(killswitch_str).expanduser() if killswitch_str else ''
             killswitch = {}
 
             for strategy_name in strategies:
@@ -740,7 +746,7 @@ class WebProcessor:
                     pnl_dict = self.pnl[session][strategy_name]
                     theopnl_1d = pnl_dict.get('sum_theo', {}).get('001d', 0.0)
                     theopnl_2d = pnl_dict.get('sum_theo', {}).get('002d', 0.0)
-                    latent_theo = pnl_dict.get('latent_theo', 0.0)
+                    latent_theo = pnl_dict.get('sum_theo', {}).get('latent_theo', 0.0)
                     realpnl_1d = pnl_dict.get('perfcum', {}).get('001d', 0.0)
                     realpnl_2d = pnl_dict.get('perfcum', {}).get('002d', 0.0)
 
@@ -750,7 +756,7 @@ class WebProcessor:
                                                  'realpnl_2d': realpnl_2d,
                                                  'latent_theo': latent_theo}
 
-            if killswitchfile != '':
+            if killswitchfile:
                 with open(killswitchfile, 'w') as myfile:
                     if len(killswitch) > 0:
                         logging.info(f'Writing kill switch {killswitch} to {killswitchfile}')
