@@ -67,7 +67,6 @@ if [ "$LAUNCH_BACKEND" = "yes" ]; then
     echo "  Backend Port: $GW_PORT"
     echo ""
     
-    cd "$(dirname "$0")"
     python $EXE_DIR/src/web_api.py --config "$CONFIG_FILE" &
     BACKEND_PID=$!
     echo "Backend started with PID: $BACKEND_PID"
@@ -101,8 +100,6 @@ if [ "$DASHBOARD" != "none" ]; then
         fi
     fi
 fi
-
-cd "$(dirname "$0")"
 
 # Launch selected dashboard
 if [ "$DASHBOARD" = "streamlit" ]; then
