@@ -22,7 +22,16 @@ python-dotenv = "^1.0"
 pywebio = "^1.8"
 requests = "^2.31"
 watchdog = "^3.0"
-nicegui = "^1.4"
+streamlit = "^1.53"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+
+[tool.pytest.ini_options]
+testpaths = ["src/test"]
+pythonpath = ["."]
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["poetry-core"]

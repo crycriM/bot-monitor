@@ -87,11 +87,16 @@ def runner(event, processor, pace):
         async def read_matching(session: str = 'binance', account_key: str = 'bitget_2'):
             report = processor.get_matching(session, account_key)
             try:
-                return JSONResponse(report.to_dict(orient='index'))
+                # Check if report is a DataFrame
+                if hasattr(report, 'to_dict'):
+                    return JSONResponse(report.to_dict(orient='index'))
+                else:
+                    # Already a dict or string
+                    return JSONResponse(report if isinstance(report, dict) else {'message': report})
             except Exception as e:
                 return JSONResponse({'session': session,
                                      'account_key': account_key,
-                                     'error': e.args[0]})
+                                     'error': str(e)})
             # if isinstance(report, pd.DataFrame):
             #     return HTMLResponse(report.to_html(formatters={'entry': lambda x: x.strftime('%d-%m-%Y %H:%M'),
             #                                                    'theo': lambda x: f'{x:.0f}',
