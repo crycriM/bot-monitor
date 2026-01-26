@@ -124,25 +124,25 @@ if [ "$DASHBOARD" = "streamlit" ]; then
         echo "Stopping backend..."
         kill $BACKEND_PID 2>/dev/null
     fi
-elif [ "$DASHBOARD" = "nicegui" ]; then
-    echo "Starting NiceGUI dashboard..."
-    echo "  Config: $CONFIG_FILE"
-    echo "  Dashboard Port: $PORT"
-    echo "  Backend Port: $GW_PORT"
-    echo ""
-    echo "Open browser to: http://localhost:$PORT"
-    echo ""
+# elif [ "$DASHBOARD" = "nicegui" ]; then
+#     echo "Starting NiceGUI dashboard..."
+#     echo "  Config: $CONFIG_FILE"
+#     echo "  Dashboard Port: $PORT"
+#     echo "  Backend Port: $GW_PORT"
+#     echo ""
+#     echo "Open browser to: http://localhost:$PORT"
+#     echo ""
     
-    python $EXE_DIR/src/web_front_new.py \
-        --config "$CONFIG_FILE" \
-        --port "$PORT" \
-        --gw_port "$GW_PORT"
+#     python $EXE_DIR/src/web_front_new.py \
+#         --config "$CONFIG_FILE" \
+#         --port "$PORT" \
+#         --gw_port "$GW_PORT"
     
-    # Kill backend if we started it
-    if [ ! -z "$BACKEND_PID" ]; then
-        echo "Stopping backend..."
-        kill $BACKEND_PID 2>/dev/null
-    fi
+#     # Kill backend if we started it
+#     if [ ! -z "$BACKEND_PID" ]; then
+#         echo "Stopping backend..."
+#         kill $BACKEND_PID 2>/dev/null
+#     fi
 fi
 
 # LAUNCH_BACKEND=yes DASHBOARD=streamlit ./launch_dashboard.sh
