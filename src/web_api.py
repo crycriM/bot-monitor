@@ -5,7 +5,7 @@ import logging
 import argparse
 import traceback
 import yaml
-
+from pathlib import Path
 try:
     from datetime import UTC
 except:
@@ -23,6 +23,7 @@ from shared_utils.bot_reporting import TGMessenger
 
 app = None
 
+LOGGER = logging.getLogger('web_processor')
 
 
 def runner(event, processor, pace):
@@ -123,13 +124,13 @@ def runner(event, processor, pace):
             await asyncio.sleep(pace)
             try:
                 if not processor.validate_file_watchers():
-                    logging.error('File watcher validation failed, attempting restart')
+                    LOGGER.error('File watcher validation failed, attempting restart')
                     processor.stop_file_watchers()
                     loop = asyncio.get_event_loop()
                     processor.start_file_watchers(loop, task_queue)
             except Exception as e:
-                logging.error(f'Error in watcher validation: {e}')
-                logging.error(traceback.format_exc())
+                LOGGER.error(f'Error in watcher validation: {e}')
+                LOGGER.error(traceback.format_exc())
 
     async def refresh(with_matching):
         await processor.refresh(with_matching)
@@ -144,7 +145,7 @@ def runner(event, processor, pace):
         if message is not None:
             for error in message:
                 TGMessenger.send(error, 'CM')
-            logging.info(f'Sent {len(message)} msg')
+            LOGGER.info(f'Sent {len(message)} msg')
 
     async def check(checking_coro):
         messages = await checking_coro
@@ -154,11 +155,11 @@ def runner(event, processor, pace):
         """Handle specific file change events"""
         try:
             if file_type == SignalType.SESSION_FILE:
-                logging.info(f'Session file changed: {file_path}')
+                LOGGER.info(f'Session file changed: {file_path}')
                 await check(processor.check_running())
 
             elif file_type == SignalType.CONFIG_FILE:
-                logging.info(f'Config file changed: {file_path}')
+                LOGGER.info(f'Config file changed: {file_path}')
                 await processor.update_config(session, file_path)
                 # Rebuild file watchers with new config
                 processor.stop_file_watchers()
@@ -167,7 +168,7 @@ def runner(event, processor, pace):
                 processor.start_file_watchers(loop, task_queue)
 
             elif file_type == SignalType.PNL_FILE or file_type == SignalType.LATENT_FILE:
-                logging.info(f'PnL/Latent file changed: {file_path}')
+                LOGGER.info(f'PnL/Latent file changed: {file_path}')
                 strategy_name = entity
                 if session in processor.session_configs:
                     working_directory = processor.session_configs[session].get('working_directory', '')
@@ -179,11 +180,11 @@ def runner(event, processor, pace):
                             await check(processor.check_latent())
 
             elif file_type == SignalType.AUM_FILE:
-                logging.info(f'AUM file changed: {file_path}')
+                LOGGER.info(f'AUM file changed: {file_path}')
                 await processor.update_aum(session)
 
             elif file_type == SignalType.POS_FILE:
-                logging.info(f'Position file changed: {file_path}')
+                LOGGER.info(f'Position file changed: {file_path}')
                 # Refresh quotes first to ensure matching uses fresh prices
                 await processor.refresh_quotes()
                 processor.update_account_multi()
@@ -192,7 +193,7 @@ def runner(event, processor, pace):
                 await check(processor.check_all())
 
             elif file_type == SignalType.STATE_FILE:
-                logging.info(f'State file changed: {file_path}')
+                LOGGER.info(f'State file changed: {file_path}')
                 strategy_name = entity
                 if session in processor.session_configs:
                     working_directory = processor.session_configs[session].get('working_directory', '')
@@ -202,15 +203,15 @@ def runner(event, processor, pace):
                         await processor.update_summary(session, working_directory, strategy_name, strategy_param)
 
         except Exception as e:
-            logging.error(f'Error handling file event for {file_path}: {e}')
-            logging.error(traceback.format_exc())
+            LOGGER.error(f'Error handling file event for {file_path}: {e}')
+            LOGGER.error(traceback.format_exc())
 
     async def main():
         event.loop = asyncio.get_event_loop()
         task_queue = asyncio.Queue()
 
         # Initialize: load all data once, build file registry, start watchers
-        logging.info('Performing initial data load')
+        LOGGER.info('Performing initial data load')
         await refresh(with_matching=True)  # Enable matching to detect initial mismatches
         await refresh_quotes()
 
@@ -224,7 +225,7 @@ def runner(event, processor, pace):
         quote_runner = asyncio.create_task(heartbeat_price_update(task_queue, pace['PRICE_UPDATE']))
         validation_runner = asyncio.create_task(heartbeat_validation(processor, pace['CHECK'], task_queue))  # 10 min validation
 
-        logging.info('Event loop started, processing file events')
+        LOGGER.info('Event loop started, processing file events')
 
         while True:
             item = await task_queue.get()
@@ -245,11 +246,11 @@ def runner(event, processor, pace):
                 break
             else:
                 # Unknown event type
-                logging.warning(f'Unknown event type: {item}')
+                LOGGER.warning(f'Unknown event type: {item}')
                 task_queue.task_done()
 
         # Cleanup
-        logging.info('Stopping background tasks')
+        LOGGER.info('Stopping background tasks')
         web_runner.cancel()
         quote_runner.cancel()
         validation_runner.cancel()
@@ -261,6 +262,8 @@ def runner(event, processor, pace):
 
 if __name__ == '__main__':
     load_dotenv()
+    LOGGER = logging.getLogger('web_processor')
+        
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="input file", default='')
     args = parser.parse_args()
@@ -275,12 +278,24 @@ if __name__ == '__main__':
         config = {}
 
     pace = config.get('pace', {'REFRESH': 180, 'MATCHING': 60, 'PRICE_UPDATE': 600, 'RUNNING': 300})
+    fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
+    filename = config.get('logs', {}).get('file', '~/logs/web_processor.log')
+    level = config.get('logs', {}).get('level', 'INFO')
+    backup_count = config.get('logs', {}).get('backup_count', 7)
+    filename = Path(filename).expanduser()
+    handler = logging.handlers.TimedRotatingFileHandler(filename=filename,
+                                                       when="midnight", interval=1, backupCount=backup_count)
+    handler.setFormatter(fmt)
+    LOGGER.setLevel(level)
+    LOGGER.addHandler(handler)
+
     started = threading.Event()
     processor = WebProcessor(config)
     th = threading.Thread(target=runner, args=(started, processor, pace,))
-    logging.info('Starting')
+
+    LOGGER.info('Starting')
     th.start()
     started.wait()
-    logging.info('Started')
+    LOGGER.info('Started')
     th.join()
-    logging.info('Stopped')
+    LOGGER.info('Stopped')

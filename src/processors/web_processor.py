@@ -24,7 +24,6 @@ from utils_files import (
 from .file_watcher import FileWatcherManager
 from shared_utils.online import parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler
-from logging.handlers import TimedRotatingFileHandler
 from trading_bot.web_broker import WebSpreaderBroker
 
 LOGGER = logging.getLogger('web_processor')
@@ -41,12 +40,6 @@ class WebProcessor:
         self.processor_config = config['session']
         self.config_files = {session: Path(self.processor_config[session]['config_file']).expanduser() for session in self.processor_config}
         self.config_position_matching_files = {session: Path(self.processor_config[session]['config_position_matching_file']).expanduser() for session in self.processor_config}
-        fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
-        handler = TimedRotatingFileHandler(filename='output/web_processor.log',
-                                           when="midnight", interval=1, backupCount=7)
-        handler.setFormatter(fmt)
-        logging.getLogger().setLevel(logging.INFO)
-        logging.getLogger().addHandler(handler)
 
         self.session_configs = {}
         for session, config_file in self.config_files.items():

@@ -357,12 +357,12 @@ def main():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='input file', default='')
-    parser.add_argument('--port', help='port', default=8501)
+    parser.add_argument('--port', help='port', default=8880)
     parser.add_argument('--gw_port', help='gateway port', default=14440)
     args = parser.parse_args()
 
     initialize_globals(args.config, int(args.gw_port))
 
     # Note: Streamlit port is set via command line when running
-    # Run with: streamlit run web_front_sl.py --server.port 8501 -- --config=config/web_processor.yml --gw_port=14440
+    # Run with: streamlit run web_front_sl.py --server.port 8880 -- --config=config/web_processor.yml --gw_port=14440
     main()
