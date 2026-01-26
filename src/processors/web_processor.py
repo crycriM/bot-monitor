@@ -44,13 +44,13 @@ class WebProcessor:
         self.session_configs = {}
         for session, config_file in self.config_files.items():
             if os.path.exists(config_file):
-                logging.info(f'Reading session config {config_file}')
+                LOGGER.info(f'Reading session config {config_file}')
                 with open(config_file, 'r') as myfile:
                     params = json.load(myfile)
                     params['working_directory'] = Path(params['working_directory']).expanduser()
                     self.session_configs[session] = params
             else:
-                logging.warning(f'No config file for {session} with name {config_file}')
+                LOGGER.warning(f'No config file for {session} with name {config_file}')
 
         self.session_matching_configs={}
         for session, config_matching_file in self.config_position_matching_files.items():
@@ -59,8 +59,7 @@ class WebProcessor:
                     params = json.load(myfile)
                     self.session_matching_configs[session] = params
             else:
-                logging.warning(f'No matching config file for {session} with name {config_matching_file}')
-
+                LOGGER.warning(f'No matching config file for {session} with name {config_matching_file}')
         self.aum = {}
         self.strategy_state = {}
         self.strategy_types = {}
@@ -94,10 +93,10 @@ class WebProcessor:
         try:
             for session, session_params in self.session_configs.items():
                 strategies = session_params['strategy']
-                logging.info(f'Adding strategies for {session} session')
+                LOGGER.info(f'Adding strategies for {session} session')
 
                 for strategy_name, strategy_param in strategies.items():
-                    logging.info(f'Adding strategy {strategy_name}')
+                    LOGGER.info(f'Adding strategy {strategy_name}')
                     strat_account = strategy_param['account_trade']
                     strat_exchange = strategy_param.get('exchange_trade', '')
                     active = strategy_param.get('active', False)
@@ -114,10 +113,10 @@ class WebProcessor:
                         self.used_accounts[session][strategy_name] = (strat_exchange, strat_account)
                     self.strategy_types[session][strategy_name] = strategy_param.get('type', 'other')
         except Exception as e:
-            logging.error(f'Error updating accounts by strat: {e.args[0]}')
-            logging.error(traceback.format_exc())
+            LOGGER.error(f'Error updating accounts by strat: {e.args[0]}')
+            LOGGER.error(traceback.format_exc())
             self.used_accounts = {}
-        logging.info(f'Built account dict {self.used_accounts}')
+        LOGGER.info(f'Built account dict {self.used_accounts}')
 
     def build_watched_files_registry(self):
         """Delegate to FileWatcherManager"""
@@ -148,7 +147,7 @@ class WebProcessor:
         strategy_positions = {}
 
         for session, accounts in self.used_accounts.items():
-            logging.info(f'Updating account positions for {session}')
+            LOGGER.info(f'Updating account positions for {session}')
             # populate exchange account list for the exchange session
             if session not in account_list:
                 account_list[session] = []
@@ -167,25 +166,25 @@ class WebProcessor:
                 self.account_real_pos[session] = {}
             for (trade_exchange, account) in account_list[session]:
                 key = '_'.join((trade_exchange, account))
-                logging.info(f'Getting account positions for {key}')
+                LOGGER.info(f'Getting account positions for {key}')
                 working_directory = self.session_configs[session]['working_directory']
                 trade_account_dir = working_directory / key
                 theo_pos_file = trade_account_dir / 'current_state_theo.pos'
 
                 if os.path.exists(theo_pos_file):
                     theo_pos_data = read_pos_file(theo_pos_file)
-                    logging.info(f'Found {len(theo_pos_data)} theo positions for {session} {key}')
+                    LOGGER.info(f'Found {len(theo_pos_data)} theo positions for {session} {key}')
                 else:
-                    logging.warning(f'No theo pos file {theo_pos_file} for {session} {key}')
+                    LOGGER.warning(f'No theo pos file {theo_pos_file} for {session} {key}')
                     theo_pos_data = {}
                 real_pos_data = {}
                 if trade_exchange != 'dummy':
                     real_pos_file = trade_account_dir / 'current_state.pos'
                     if os.path.exists(real_pos_file):
                         real_pos_data = read_pos_file(real_pos_file)
-                        logging.info(f'Found {len(real_pos_data)} real positions for {session} {key}')
+                        LOGGER.info(f'Found {len(real_pos_data)} real positions for {session} {key}')
                     else:
-                        logging.warning(f'No real pos file {real_pos_file} for {session} {key}')
+                        LOGGER.warning(f'No real pos file {real_pos_file} for {session} {key}')
                     self.account_real_pos[session][key] = real_pos_data.copy()
                 self.account_theo_pos[session][key] = theo_pos_data.copy()
                 # # get account positions from exchange
@@ -196,16 +195,16 @@ class WebProcessor:
                 # self.account_positions[session][key] = positions
                 tickers = [name for name in set(theo_pos_data.keys()) if 'USD' in name]
                 self.perimeters[session].update(tickers)
-                logging.info(f'Added {len(theo_pos_data)} coins from theo pos file to perimeter for {session} {key}')
+                LOGGER.info(f'Added {len(theo_pos_data)} coins from theo pos file to perimeter for {session} {key}')
                 tickers = [name for name in set(real_pos_data.keys()) if 'USD' in name]
                 self.perimeters[session].update(tickers)
-                logging.info(f'Updated with real pos, perimeter is now  {len(self.perimeters[session])} coins for {session} {key}')
+                LOGGER.info(f'Updated with real pos, perimeter is now  {len(self.perimeters[session])} coins for {session} {key}')
 
         # Calculate median position sizes for each account (needed by position_comparator)
         self.median_position_sizes = calculate_median_position_sizes(
             self.account_theo_pos, self.quotes)
         for account_key, size in self.median_position_sizes.items():
-            logging.info(f'Median position size for {account_key}: {size:.2f}')
+            LOGGER.info(f'Median position size for {account_key}: {size:.2f}')
         return
 
     def _do_one_matching(self, pos_data, pos_data_theo, quotes):
@@ -255,7 +254,7 @@ class WebProcessor:
         quotes = {}
 
         if end_point._exchange_async.has.get('fetchTickers', False):
-            logging.info(f'entering fetchTickers')
+            LOGGER.info(f'entering fetchTickers')
             tickers = []
             for coin in perimeter:
                 ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
@@ -271,7 +270,7 @@ class WebProcessor:
                     info = {}
                 quotes[symbol] = info.get('last', None)
         else:
-            logging.info(f'entering fetch Ticker loop')
+            LOGGER.info(f'entering fetch Ticker loop')
             for coin in perimeter:
                 symbol = bh.symbol_to_market_with_factor(coin)[0]
                 ticker = await end_point._exchange_async.fetch_ticker(symbol)
@@ -287,7 +286,7 @@ class WebProcessor:
         """
         Fetch quotes for all pairs in the session.
         """
-        logging.info(f'Fetching quotes for session {session}')
+        LOGGER.info(f'Fetching quotes for session {session}')
         exchange_name = session
         account = ''
         params = {
@@ -298,18 +297,18 @@ class WebProcessor:
             end_point = BrokerHandler.build_end_point(exchange_name)
             bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                                logger_name='broker_handler')
-            logging.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
+            LOGGER.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
             quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
             with open('output/web_quotes.txt', 'w') as myfile:
                 print(quotes, file=myfile)
 
             for coin in self.perimeters[session]:
                 if coin not in quotes:
-                    logging.info(f'Missing {coin} in fetch_ticker result')
+                    LOGGER.info(f'Missing {coin} in fetch_ticker result')
 
             await end_point._exchange_async.close()
             await bh.close_exchange_async()
-            logging.info(f'{len(quotes)} quotes ready for session {session}')
+            LOGGER.info(f'{len(quotes)} quotes ready for session {session}')
 
             self.quotes[session] = quotes
 
@@ -322,23 +321,22 @@ class WebProcessor:
 
         except Exception as e:
             self.quotes[session] = {}
-            logging.error(f'Error fetching quotes for session {session}: {e.args[0]}')
+            LOGGER.error(f'Error fetching quotes for session {session}: {e.args[0]}')
 
     async def update_config(self, session, config_file):
         if os.path.exists(config_file):
-            logging.info(f'Updating {session} config {config_file}')
+            LOGGER.info(f'Updating {session} config {config_file}')
             async with aiofiles.open(config_file, 'r') as myfile:
                 try:
                     content = await myfile.read()
                     params = json.loads(content)
                     self.session_configs[session] = params
                 except Exception as e:
-                    logging.error(f'Unreadable config file {config_file}')
+                    LOGGER.error(f'Unreadable config file {config_file}')
         else:
-            logging.warning(f'No config file to update for {session} with name {config_file}')
-
+            LOGGER.warning(f'No config file to update for {session} with name {config_file}')
     async def update_aum(self, session):
-        logging.info('updating aum for %s', session)
+        LOGGER.info('updating aum for %s', session)
         now = today_utc()
         accounts = self.used_accounts[session]
         working_directory = self.session_configs[session]['working_directory']
@@ -373,7 +371,7 @@ class WebProcessor:
                     extract = hourly.loc[hourly.index > last_date[back_days[0]]]
                     is_live = extract.std() > 0
                     if is_live:
-                        logging.info(f'session {session} account {account} is live')
+                        LOGGER.info(f'session {session} account {account} is live')
                         real_pnl_dict.update({'vol': {},
                                               'apr': {},
                                               'perfcum': {},
@@ -381,13 +379,13 @@ class WebProcessor:
                                               'drawdawn': {}
                                               })
                     else:
-                        logging.info(f'session {session} account {account} is not live with data {extract}')
+                        LOGGER.info(f'session {session} account {account} is not live with data {extract}')
                 except Exception as e:
                     is_live = False
                     aum = pd.DataFrame()
                     daily = pd.Series()
-                    logging.error(f'Error in aum file {aum_file} for account {account_key}: {e.args[0]}')
-                    logging.error(traceback.format_exc())
+                    LOGGER.error(f'Error in aum file {aum_file} for account {account_key}: {e.args[0]}')
+                    LOGGER.error(traceback.format_exc())
                 if is_live:
                     for day in back_days:
                         try:
@@ -426,11 +424,11 @@ class WebProcessor:
                             real_pnl_dict['apr'].update({f'{day:03d}d': 0})
                             real_pnl_dict['perfcum'].update({f'{day:03d}d': 0})
                             real_pnl_dict['drawdawn'].update({f'{day:03d}d': 0})
-                            logging.error(f'Error in aum data for strat {account_key} for day {day}')
+                            LOGGER.error(f'Error in aum data for strat {account_key} for day {day}')
                             no_graph = True
 
                         if day == 180 and not no_graph:
-                            logging.info(f'Generating graph for {session}-{account_key}')
+                            LOGGER.info(f'Generating graph for {session}-{account_key}')
                             html = generate_perf_chart(perfcum, session, account_key)
                             temp_dir = get_temp_dir()
                             filename = temp_dir / f'{session}_{account_key}_fig1.html'
@@ -455,10 +453,10 @@ class WebProcessor:
                         self.aum[session] = {}
                     self.aum[session][account_key] = real_pnl_dict
             else:
-                logging.info(f'No {aum_file} file')
+                LOGGER.info(f'No {aum_file} file')
 
     async def update_pnl(self, session, working_directory, strategy_name, strategy_param):
-        logging.info('updating pnl for %s, %s', session, strategy_name)
+        LOGGER.info('updating pnl for %s, %s', session, strategy_name)
         now = today_utc()
         strategy_directory = working_directory / strategy_name
         pnl_file = strategy_directory / 'pnl.csv'
@@ -471,12 +469,12 @@ class WebProcessor:
 
         if os.path.exists(latent_file):
             try:
-                logging.info('reading latent file for %s, %s', session, strategy_name)
+                LOGGER.info('reading latent file for %s, %s', session, strategy_name)
                 latent_result = await read_latent_file(latent_file)
                 pnl_dict['sum_theo']['latent_theo'] = latent_result['latent_return'].iloc[-1]
             except:
                 latent_result = pd.DataFrame()
-                logging.error(f'Error in latent file {latent_file} for strat {strategy_name}')
+                LOGGER.error(f'Error in latent file {latent_file} for strat {strategy_name}')
                 pnl_dict['sum_theo']['latent_theo'] = 0
             if session not in self.latent:
                 self.latent[session] = {strategy_name: latent_result}
@@ -516,7 +514,7 @@ class WebProcessor:
                                  'sum_theo': {f'{day:03d}d': 0 for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
-                logging.error(f'Error in pnl file {pnl_file} for strat {strategy_name}')
+                LOGGER.error(f'Error in pnl file {pnl_file} for strat {strategy_name}')
 
             try:
                 JSONResponse(pnl_dict)
@@ -531,7 +529,7 @@ class WebProcessor:
                 #     j = json.dumps(self.pnl, indent=4, cls=NpEncoder)
                 #     print(j, file=myfile)
             except:
-                logging.error(f'Error in pnl dict for strat {session}:{strategy_name}')
+                LOGGER.error(f'Error in pnl dict for strat {session}:{strategy_name}')
                 self.pnl[session] = {strategy_name: {}}
 
     async def update_summary(self, session, working_directory, strategy_name, strategy_param):
@@ -644,11 +642,11 @@ class WebProcessor:
                 'pairs': summary_pairs,
                 'coins': summary_coins}
         except Exception as e:
-            logging.warning(f'Exception {e.args[0]} during update_summary of account {session}.{strategy_name}')
+            LOGGER.warning(f'Exception {e.args[0]} during update_summary of account {session}.{strategy_name}')
 
     async def update_account(self, session, strategy_name, strategy_param):
         destination = strategy_param['send_orders']
-        logging.info('updating account for %s, %s', session, strategy_name)
+        LOGGER.info('updating account for %s, %s', session, strategy_name)
         if session not in self.matching:
             self.matching[session] = {}
         account = strategy_param['account_trade']
@@ -658,7 +656,7 @@ class WebProcessor:
             if destination != 'dummy':
                 all_positions = await self.get_account_position(trade_exchange, account)
                 if 'pose' not in all_positions:
-                    logging.info('empty account for %s, %s', session, strategy_name)
+                    LOGGER.info('empty account for %s, %s', session, strategy_name)
                     return
                 positions = all_positions['pose']
                 theo = {coin: pose for coin, pose in self.summaries[session][strategy_name]['theo']['coins'].items() if
@@ -672,7 +670,7 @@ class WebProcessor:
                 matching = pd.concat([current, theo_pos], axis=1).fillna(0)
                 seuil_current = matching['current'].apply(np.abs).max() / 5
                 seuil_theo = matching['theo'].apply(np.abs).max() / 5
-                logging.info('Thresholds for  %s, %s: %f, %f', session, strategy_name, seuil_current, seuil_theo)
+                LOGGER.info('Thresholds for  %s, %s: %f, %f', session, strategy_name, seuil_current, seuil_theo)
                 significant = matching[
                     (matching['theo'].apply(np.abs) > seuil_theo) | (matching['current'].apply(np.abs) > seuil_theo)]
                 matching = matching.loc[significant.index]
@@ -696,7 +694,7 @@ class WebProcessor:
 
                 self.matching[session].update({strategy_name: matching})
         except Exception as e:
-            logging.info(f'Exception {e.args[0]} for account {session}.{strategy_name}')
+            LOGGER.error(f'Exception {e.args[0]} for account {session}.{strategy_name}')
 
     async def check_latent(self):
         message = []
@@ -713,7 +711,7 @@ class WebProcessor:
                             latent_return = 0
                         if np.isnan(latent_pnl) or np.isinf(latent_pnl):
                             latent_pnl = 0
-                        logging.info(f'checking latent for {session}:{strategy_name}, found {latent_return}, {latent_pnl}')
+                        LOGGER.info(f'checking latent for {session}:{strategy_name}, found {latent_return}, {latent_pnl}')
                         if latent_return < -0.04 and self.processor_config[session].get('check_latent'):
                             message += [f'Latent return < -4% for {strategy_name}@{session}']
         return message
@@ -760,10 +758,10 @@ class WebProcessor:
             if killswitchfile:
                 with open(killswitchfile, 'w') as myfile:
                     if len(killswitch) > 0:
-                        logging.info(f'Writing kill switch {killswitch} to {killswitchfile}')
+                        LOGGER.info(f'Writing kill switch {killswitch} to {killswitchfile}')
                         json.dump(killswitch, myfile)
                     else:
-                        logging.info(f'No kill switch for {killswitchfile}')
+                        LOGGER.info(f'No kill switch for {killswitchfile}')
                         myfile.write('{}')
 
         return message
@@ -785,7 +783,7 @@ class WebProcessor:
         # checking matching using precomputed DataFrame
         for session, matching_dict in self.matching.items():
             for account_key, matching_df in matching_dict.items():
-                logging.info(f'checking {session}:{account_key}')
+                LOGGER.info(f'checking {session}:{account_key}')
                 try:
                     if matching_df.empty:
                         continue
@@ -829,6 +827,7 @@ class WebProcessor:
                     # Check position mismatches for significant positions
                     mismatched_positions = matching_df[matching_df['is_mismatch'] == True]
                     if len(mismatched_positions) > 0:
+                        LOGGER.info(f'Found {len(mismatched_positions)} mismatched positions for {account_key}@{session}')
                         for coin in mismatched_positions.index:
                             real_pos = mismatched_positions.loc[coin, 'real']
                             theo_pos = mismatched_positions.loc[coin, 'theo']
@@ -846,21 +845,21 @@ class WebProcessor:
                         message += [f'Discrepancy {account_key}@{session}: {current_only} have position in account but not in theo']
 
                 except Exception as e:
-                    logging.error(f'Exception {e.args[0]} during check of {account_key}@{session}')
-                    logging.error(traceback.format_exc())
+                    LOGGER.error(f'Exception {e.args[0]} during check of {account_key}@{session}')
+                    LOGGER.error(traceback.format_exc())
 
         return message
 
     async def refresh_quotes(self):
         tasks = []
-        logging.info('refreshing quotes')
+        LOGGER.info('refreshing quotes')
         for session in self.perimeters:
             tasks.append(asyncio.create_task(self.fetch_quotes(session)))
         await asyncio.gather(*tasks)
         return
 
     async def refresh(self, with_matching=True):
-        logging.info('refreshing')
+        LOGGER.info('refreshing')
 
         for session, params in self.session_configs.items():
             working_directory = params['working_directory']
@@ -874,13 +873,13 @@ class WebProcessor:
                         await self.update_summary(session, working_directory, strategy_name, strategy_param)
                         await self.update_pnl(session, working_directory, strategy_name, strategy_param)
                     except Exception as e:
-                        logging.error(f'exception {e.args[0]} for {session}/{strategy_name} in refresh')
-                        logging.error(traceback.format_exc())
+                        LOGGER.error(f'exception {e.args[0]} for {session}/{strategy_name} in refresh')
+                        LOGGER.error(traceback.format_exc())
             try:
                 await self.update_aum(session)
             except Exception as e:
-                logging.error(f'exception {e.args[0]} for {session} in update_aum')
-                logging.error(traceback.format_exc())
+                LOGGER.error(f'exception {e.args[0]} for {session} in update_aum')
+                LOGGER.error(traceback.format_exc())
         self.update_account_multi()
 
         if with_matching:
@@ -935,7 +934,7 @@ class WebProcessor:
         try:
             positions = await end_point.get_positions_async()
         except Exception as e:
-            logging.warning(f'exchange/account {exchange_name}/{account} sent exception {e.args}')
+            LOGGER.warning(f'exchange/account {exchange_name}/{account} sent exception {e.args}')
             positions = {}
 
         quotes = await self._fetch_all_tickers(bh, end_point, positions)
