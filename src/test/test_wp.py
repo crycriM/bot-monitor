@@ -5,7 +5,12 @@ import tempfile
 import json
 import os
 from pathlib import Path
-from datetime import datetime, UTC
+from datetime import datetime
+try:
+    from datetime import UTC
+except ImportError:
+    from datetime import timezone
+    UTC = timezone.utc
 from src.processors.web_processor import WebProcessor
 
 

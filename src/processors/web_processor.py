@@ -8,7 +8,12 @@ import asyncio
 import pandas as pd
 import numpy as np
 from math import isclose
-from datetime import timedelta, UTC
+from datetime import timedelta
+try:
+    from datetime import UTC
+except ImportError:
+    from datetime import timezone
+    UTC = timezone.utc
 import traceback
 
 from utils_files import (
