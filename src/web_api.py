@@ -222,7 +222,7 @@ def runner(event, processor, pace):
         # Start background tasks
         web_runner = asyncio.create_task(run_web_processor())
         quote_runner = asyncio.create_task(heartbeat_price_update(task_queue, pace['PRICE_UPDATE']))
-        validation_runner = asyncio.create_task(heartbeat_validation(processor, 600, task_queue))  # 10 min validation
+        validation_runner = asyncio.create_task(heartbeat_validation(processor, pace['CHECK'], task_queue))  # 10 min validation
 
         logging.info('Event loop started, processing file events')
 
