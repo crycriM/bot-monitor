@@ -144,3 +144,7 @@ elif [ "$DASHBOARD" = "nicegui" ]; then
         kill $BACKEND_PID 2>/dev/null
     fi
 fi
+
+# LAUNCH_BACKEND=yes DASHBOARD=streamlit ./launch_dashboard.sh
+# LAUNCH_BACKEND=yes DASHBOARD=nicegui ./launch_dashboard.sh
+# LAUNCH_BACKEND=yes DASHBOARD=none ./launch_dashboard.sh  # Backend only

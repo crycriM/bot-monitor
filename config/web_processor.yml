@@ -1,9 +1,5 @@
-working_directory: ~/Python/github/microservice_aws3_int/
 pace:
-  REFRESH: 180
-  RUNNING: 600
   CHECK: 600
-  MATCHING: 60
   PRICE_UPDATE: 600
 session:
   binance:
