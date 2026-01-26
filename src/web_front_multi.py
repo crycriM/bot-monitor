@@ -4,6 +4,7 @@ import yaml
 import json
 import requests
 import pandas as pd
+from pathlib import Path
 from pywebio import start_server
 from pywebio.output import (
     put_markdown, put_buttons, put_text, clear, put_datatable, use_scope, put_button,
@@ -12,6 +13,8 @@ from pywebio.output import (
 from pywebio.input import slider
 from pywebio.session import info as session_info
 from pywebio.session import set_env
+
+from utils_files import get_temp_dir
 
 GATEWAY = 'http://localhost:14440'
 #GATEWAY = 'http://54.249.107.88:14440'
@@ -152,18 +155,19 @@ def matching_req(account):
             put_html('<div class="metrics-container">')
             put_html(response.content.decode())
             put_html('</div>')
-            figname = f'temp/{exchange}_{strat}_fig1.html'
-            if os.path.exists(figname):
+            temp_dir = get_temp_dir()
+            figname = temp_dir / f'{exchange}_{strat}_fig1.html'
+            if figname.exists():
                 with open(figname, 'r') as figfile:
                     figure = figfile.read()
                     put_html(figure)
-            figname = f'temp/{exchange}_{strat}_fig2.html'
-            if os.path.exists(figname):
+            figname = temp_dir / f'{exchange}_{strat}_fig2.html'
+            if figname.exists():
                 with open(figname, 'r') as figfile:
                     figure = figfile.read()
                     put_html(figure)
-            figname = f'temp/{exchange}_{strat}_fig3.html'
-            if os.path.exists(figname):
+            figname = temp_dir / f'{exchange}_{strat}_fig3.html'
+            if figname.exists():
                 with open(figname, 'r') as figfile:
                     figure = figfile.read()
                     put_html(figure)

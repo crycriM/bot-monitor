@@ -28,6 +28,7 @@ from datafeed.broker_handler import BrokerHandler
 from web_broker import WebSpreaderBroker
 from reporting.bot_reporting import TGMessenger
 from data_analyzer.position_comparator import compare_positions
+from utils_files import get_temp_dir
 
 global app
 
@@ -404,7 +405,8 @@ class Processor:
                         fig.savefig(tmpfile, format='png')
                         encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                         html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                        filename = f'temp/{session}_{strategy_name}_fig1.html'
+                        temp_dir = get_temp_dir()
+                        filename = temp_dir / f'{session}_{strategy_name}_fig1.html'
 
                         with open(filename, 'w') as f:
                             f.write(html)
@@ -424,7 +426,7 @@ class Processor:
                         fig.savefig(tmpfile, format='png')
                         encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                         html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                        filename = f'temp/{session}_{strategy_name}_fig2.html'
+                        filename = temp_dir / f'{session}_{strategy_name}_fig2.html'
 
                         with open(filename, 'w') as f:
                             f.write(html)
@@ -444,7 +446,7 @@ class Processor:
                         fig.savefig(tmpfile, format='png')
                         encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                         html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                        filename = f'temp/{session}_{strategy_name}_fig3.html'
+                        filename = temp_dir / f'{session}_{strategy_name}_fig3.html'
 
                         with open(filename, 'w') as f:
                             f.write(html)
@@ -456,7 +458,8 @@ class Processor:
                     self.pnl[session] = {strategy_name: pnl_dict}
                 else:
                     self.pnl[session].update({strategy_name: pnl_dict})
-                filename = f'temp/pnldict.json'
+                temp_dir = get_temp_dir()
+                filename = temp_dir / 'pnldict.json'
 
                 with open(filename, 'w') as myfile:
                     j = json.dumps(self.pnl, indent=4, cls=NpEncoder)

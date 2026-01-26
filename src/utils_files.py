@@ -3,12 +3,26 @@ import pandas as pd
 import aiofiles
 import typing
 import json
+from pathlib import Path
 from starlette.concurrency import run_in_threadpool
 from starlette.background import BackgroundTask
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from starlette.responses import Response
 from datafeed.utils_online import parse_pair, utc_ize, today_utc
+
+
+def get_temp_dir():
+    """Get the temp directory path from environment variable or use default.
+    
+    Returns:
+        Path: The temp directory path
+    """
+    temp_dir = os.getenv('BOT_MONITOR_TEMP_DIR', 'temp')
+    temp_path = Path(temp_dir)
+    # Ensure directory exists
+    temp_path.mkdir(parents=True, exist_ok=True)
+    return temp_path
 
 
 def last_modif(hearbeat_file):

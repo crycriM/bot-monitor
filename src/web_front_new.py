@@ -8,6 +8,8 @@ import pandas as pd
 from pathlib import Path
 from nicegui import ui
 
+from utils_files import get_temp_dir
+
 CONFIG = None
 GATEWAY = None
 
@@ -355,9 +357,10 @@ def create_matching_tab():
 
                 # Load HTML figures from temp folder
                 prefix = f'{session}_{account_key}'
+                temp_dir = get_temp_dir()
                 for i in range(1, 4):
-                    figname = f'temp/{prefix}_fig{i}.html'
-                    if os.path.exists(figname):
+                    figname = temp_dir / f'{prefix}_fig{i}.html'
+                    if figname.exists():
                         with open(figname, 'r') as figfile:
                             figure = figfile.read()
                             with ui.card().classes('w-full').style('min-height: 400px'):

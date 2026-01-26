@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file
+from utils_files import last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file, get_temp_dir
 from shared_utils.online import parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler, TRADED_ACCOUNT_DICT
 from trading_bot.web_broker import WebSpreaderBroker
@@ -443,7 +443,8 @@ class Processor:
                             fig.savefig(tmpfile, format='png')
                             encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                             html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                            filename = f'temp/{session}_{account_key}_fig1.html'
+                            temp_dir = get_temp_dir()
+                            filename = temp_dir / f'{session}_{account_key}_fig1.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
@@ -463,7 +464,7 @@ class Processor:
                             fig.savefig(tmpfile, format='png')
                             encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                             html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                            filename = f'temp/{session}_{account_key}_fig2.html'
+                            filename = temp_dir / f'{session}_{account_key}_fig2.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
@@ -483,7 +484,7 @@ class Processor:
                             fig.savefig(tmpfile, format='png')
                             encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                             html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-                            filename = f'temp/{session}_{account_key}_fig3.html'
+                            filename = temp_dir / f'{session}_{account_key}_fig3.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
@@ -559,7 +560,8 @@ class Processor:
                     self.pnl[session] = {strategy_name: pnl_dict}
                 else:
                     self.pnl[session].update({strategy_name: pnl_dict})
-                # filename = f'temp/pnldict.json'
+                # temp_dir = get_temp_dir()
+                # filename = temp_dir / 'pnldict.json'
                 #
                 # with open(filename, 'w') as myfile:
                 #     j = json.dumps(self.pnl, indent=4, cls=NpEncoder)

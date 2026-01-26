@@ -19,7 +19,7 @@ import traceback
 from utils_files import (
     last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
     generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
-    calculate_median_position_sizes, JSONResponse
+    calculate_median_position_sizes, JSONResponse, get_temp_dir
 )
 from .file_watcher import FileWatcherManager
 from shared_utils.online import parse_pair, today_utc
@@ -432,13 +432,14 @@ class WebProcessor:
                         if day == 180 and not no_graph:
                             logging.info(f'Generating graph for {session}-{account_key}')
                             html = generate_perf_chart(perfcum, session, account_key)
-                            filename = f'temp/{session}_{account_key}_fig1.html'
+                            temp_dir = get_temp_dir()
+                            filename = temp_dir / f'{session}_{account_key}_fig1.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
 
                             html = generate_pnl_chart(pnlcum, session, account_key)
-                            filename = f'temp/{session}_{account_key}_fig2.html'
+                            filename = temp_dir / f'{session}_{account_key}_fig2.html'
 
                             with open(filename, 'w') as f:
                                 f.write(html)
@@ -446,7 +447,8 @@ class WebProcessor:
                         elif day == 30 and not no_graph:
                             daily = last_aum['perf'].resample('1d').sum()
                             html = generate_daily_perf_chart(daily, session, account_key)
-                            filename = f'temp/{session}_{account_key}_fig3.html'
+                            temp_dir = get_temp_dir()
+                            filename = temp_dir / f'{session}_{account_key}_fig3.html'
                             with open(filename, 'w') as f:
                                 f.write(html)
                     if session not in self.aum:
@@ -522,7 +524,8 @@ class WebProcessor:
                     self.pnl[session] = {strategy_name: pnl_dict}
                 else:
                     self.pnl[session].update({strategy_name: pnl_dict})
-                # filename = f'temp/pnldict.json'
+                # temp_dir = get_temp_dir()
+                # filename = temp_dir / 'pnldict.json'
                 #
                 # with open(filename, 'w') as myfile:
                 #     j = json.dumps(self.pnl, indent=4, cls=NpEncoder)
