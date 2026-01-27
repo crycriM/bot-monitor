@@ -293,21 +293,25 @@ class WebProcessor:
             'exchange_trade': exchange_name,
             'account_trade': account
         }
+        end_point = None
+        bh = None
+        quotes = {}
         try:
             end_point = BrokerHandler.build_end_point(exchange_name)
             bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                                logger_name='broker_handler')
-            LOGGER.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
-            quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
-            with open('output/web_quotes.txt', 'w') as myfile:
-                print(quotes, file=myfile)
+            LOGGER.info(f'Fetching {len(self.perimeters.get(session, []))} quotes for session {session}')
+            quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters.get(session, set()))
+            try:
+                with open('output/web_quotes.txt', 'w') as myfile:
+                    print(quotes, file=myfile)
+            except Exception:
+                LOGGER.debug('Could not write output/web_quotes.txt')
 
-            for coin in self.perimeters[session]:
+            for coin in self.perimeters.get(session, set()):
                 if coin not in quotes:
                     LOGGER.info(f'Missing {coin} in fetch_ticker result')
 
-            await end_point._exchange_async.close()
-            await bh.close_exchange_async()
             LOGGER.info(f'{len(quotes)} quotes ready for session {session}')
 
             self.quotes[session] = quotes
@@ -321,7 +325,27 @@ class WebProcessor:
 
         except Exception as e:
             self.quotes[session] = {}
-            LOGGER.error(f'Error fetching quotes for session {session}: {e.args[0]}')
+            LOGGER.error(f'Error fetching quotes for session {session}: {str(e)}')
+            LOGGER.debug(traceback.format_exc())
+        finally:
+            # Ensure resources are closed to avoid unclosed client sessions
+            try:
+                if end_point is not None and hasattr(end_point, '_exchange_async') and end_point._exchange_async is not None:
+                    try:
+                        await end_point._exchange_async.close()
+                    except Exception:
+                        LOGGER.debug('Error closing end_point._exchange_async', exc_info=True)
+            except Exception:
+                LOGGER.debug('Error while attempting to close end_point', exc_info=True)
+
+            try:
+                if bh is not None:
+                    try:
+                        await bh.close_exchange_async()
+                    except Exception:
+                        LOGGER.debug('Error closing broker handler async session', exc_info=True)
+            except Exception:
+                LOGGER.debug('Error while attempting to close broker handler', exc_info=True)
 
     async def update_config(self, session, config_file):
         if os.path.exists(config_file):
@@ -929,44 +953,68 @@ class WebProcessor:
             'exchange_trade': exchange_name,
             'account_trade': account
         }
-        end_point = BrokerHandler.build_end_point(exchange_name, account)
-        bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params, logger_name='default')
+        end_point = None
+        bh = None
+        positions = {}
+        cash = (None, None)
         try:
-            positions = await end_point.get_positions_async()
-        except Exception as e:
-            LOGGER.warning(f'exchange/account {exchange_name}/{account} sent exception {e.args}')
-            positions = {}
+            end_point = BrokerHandler.build_end_point(exchange_name, account)
+            bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params, logger_name='default')
+            try:
+                positions = await end_point.get_positions_async()
+            except Exception as e:
+                LOGGER.warning(f'exchange/account {exchange_name}/{account} sent exception {e}')
+                positions = {}
 
-        quotes = await self._fetch_all_tickers(bh, end_point, positions)
+            quotes = await self._fetch_all_tickers(bh, end_point, positions)
 
-        cash = await end_point.get_cash_async(['USDT', 'BTC'])
+            try:
+                cash = await end_point.get_cash_async(['USDT', 'BTC'])
+            except Exception:
+                cash = (None, None)
 
-        await end_point._exchange_async.close()
-        await bh.close_exchange_async()
+            response = {}
+            for coin, info in positions.items():
+                symbol, _ = bh.symbol_to_market_with_factor(coin, universal=False)
+                price = info[2]
+                if price is None or price == np.nan:
+                    price = quotes.get(symbol)
+                amount = info[1]
+                if amount is None or amount == np.nan:
+                    amount = info[0] * price
 
-        response = {}
-        for coin, info in positions.items():
-            symbol, _ = bh.symbol_to_market_with_factor(coin, universal=False)
-            price = info[2]
-            if price is None or price == np.nan:
-                price = quotes.get(symbol)
-            amount = info[1]
-            if amount is None or amount == np.nan:
-                amount = info[0] * price
+                response[symbol] = {
+                    'entry_ts': f'{info[3]}',
+                    'quantity': info[0],
+                    'ref_price': price,
+                    'amount': amount
+                }
+            response_df = pd.DataFrame(response).T
+            if len(response_df) > 0:
+                response_df.sort_values(by='amount', inplace=True)
+            response = {'pose': response_df.T.to_dict()}
+            response.update({'USDT free': cash[0], 'USDT total': cash[1]})
 
-            response[symbol] = {
-                'entry_ts': f'{info[3]}',
-                'quantity': info[0],
-                'ref_price': price,
-                'amount': amount
-            }
-        response_df = pd.DataFrame(response).T
-        if len(response_df) > 0:
-            response_df.sort_values(by='amount', inplace=True)
-        response = {'pose': response_df.T.to_dict()}
-        response.update({'USDT free': cash[0], 'USDT total': cash[1]})
+            return response
+        finally:
+            # Ensure we always close async exchange clients
+            try:
+                if end_point is not None and hasattr(end_point, '_exchange_async') and end_point._exchange_async is not None:
+                    try:
+                        await end_point._exchange_async.close()
+                    except Exception:
+                        LOGGER.debug('Error closing end_point._exchange_async', exc_info=True)
+            except Exception:
+                LOGGER.debug('Error while attempting to close end_point', exc_info=True)
 
-        return response
+            try:
+                if bh is not None:
+                    try:
+                        await bh.close_exchange_async()
+                    except Exception:
+                        LOGGER.debug('Error closing broker handler async session', exc_info=True)
+            except Exception:
+                LOGGER.debug('Error while attempting to close broker handler', exc_info=True)
 
     async def multiply(self, exchange, account, factor):
         positions = await self.get_account_position(exchange, account)
@@ -986,32 +1034,54 @@ class WebProcessor:
             'exchange_trade': exchange_trade,
             'account_trade': account
         }
-        end_point = BrokerHandler.build_end_point(exchange_trade, account)
-        bh = BrokerHandler(market_watch=exchange_trade, end_point_trade=end_point, strategy_param=params, logger_name='default')
-        broker = WebSpreaderBroker(market=exchange, account=account, broker_handler=bh)
-        response = ''
-        if np.abs(factor - 1) < 0.05:
-            return True
+        end_point = None
+        bh = None
+        broker = None
+        try:
+            end_point = BrokerHandler.build_end_point(exchange_trade, account)
+            bh = BrokerHandler(market_watch=exchange_trade, end_point_trade=end_point, strategy_param=params, logger_name='default')
+            broker = WebSpreaderBroker(market=exchange, account=account, broker_handler=bh)
+            response = ''
+            if np.abs(factor - 1) < 0.05:
+                return True
 
-        for coin, info in positions['pose'].items():
-            if coin in exclude:
-                continue
-            order_id = broker.get_id
-            quantity = info['quantity']
+            for coin, info in positions['pose'].items():
+                if coin in exclude:
+                    continue
+                order_id = broker.get_id
+                quantity = info['quantity']
 
-            if quantity == 0:
-                continue
+                if quantity == 0:
+                    continue
 
-            target = (factor - 1) * quantity
-            nature = 'n' if factor > 1 else 'x'
-            action = -1 if target < 0 else 1
-            comment = 'liquidation' if factor < 0.1 else 'multiplication'
-            target = np.abs(target)
+                target = (factor - 1) * quantity
+                nature = 'n' if factor > 1 else 'x'
+                action = -1 if target < 0 else 1
+                comment = 'liquidation' if factor < 0.1 else 'multiplication'
+                target = np.abs(target)
 
-            response = await broker.send_simple_order(order_id, coin=coin, action=action, price=None, target_quantity=target,
-                                                      comment=comment, nature=nature,
-                                                      translate_qty_incontracts=False, use_algo=True)
-            await asyncio.sleep(5)
+                response = await broker.send_simple_order(order_id, coin=coin, action=action, price=None, target_quantity=target,
+                                                          comment=comment, nature=nature,
+                                                          translate_qty_incontracts=False, use_algo=True)
+                await asyncio.sleep(5)
 
-        return response
+            return response
+        finally:
+            try:
+                if end_point is not None and hasattr(end_point, '_exchange_async') and end_point._exchange_async is not None:
+                    try:
+                        await end_point._exchange_async.close()
+                    except Exception:
+                        LOGGER.debug('Error closing end_point._exchange_async in multiply', exc_info=True)
+            except Exception:
+                LOGGER.debug('Error while attempting to close end_point in multiply', exc_info=True)
+
+            try:
+                if bh is not None:
+                    try:
+                        await bh.close_exchange_async()
+                    except Exception:
+                        LOGGER.debug('Error closing broker handler async session in multiply', exc_info=True)
+            except Exception:
+                LOGGER.debug('Error while attempting to close broker handler in multiply', exc_info=True)
 
