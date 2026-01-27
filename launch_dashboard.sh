@@ -84,22 +84,22 @@ if [ "$DASHBOARD" = "none" ]; then
 fi
 
 # Check if backend is running (if we're launching dashboard)
-if [ "$DASHBOARD" != "none" ]; then
-    echo "Checking if backend API is running on port $GW_PORT..."
-    if ! curl -s "http://localhost:$GW_PORT/status" > /dev/null 2>&1; then
-        echo "Warning: Backend API not responding on http://localhost:$GW_PORT"
-        echo "Make sure web_api.py is running first!"
-        echo ""
-        read -p "Continue anyway? (y/N) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            if [ ! -z "$BACKEND_PID" ]; then
-                kill $BACKEND_PID 2>/dev/null
-            fi
-            exit 1
-        fi
-    fi
-fi
+#if [ "$DASHBOARD" != "none" ]; then
+#    echo "Checking if backend API is running on port $GW_PORT..."
+#    if ! curl -s "http://localhost:$GW_PORT/status" > /dev/null 2>&1; then
+#        echo "Warning: Backend API not responding on http://localhost:$GW_PORT"
+#        echo "Make sure web_api.py is running first!"
+#        echo ""
+#        read -p "Continue anyway? (y/N) " -n 1 -r
+#        echo
+#        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+#            if [ ! -z "$BACKEND_PID" ]; then
+#                kill $BACKEND_PID 2>/dev/null
+#            fi
+#            exit 1
+#        fi
+#    fi
+#fi
 
 # Launch selected dashboard
 if [ "$DASHBOARD" = "streamlit" ]; then
