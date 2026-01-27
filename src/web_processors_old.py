@@ -303,27 +303,50 @@ class Processor:
             'exchange_trade': exchange_name,
             'account_trade': account
         }
+        end_point = None
+        bh = None
+        quotes = {}
         try:
             end_point = BrokerHandler.build_end_point(exchange_name)
             bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params,
                                logger_name='broker_handler')
-            logging.info(f'Fetching {len(self.perimeters[session])} quotes for session {session}')
-            quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters[session])
-            with open('output/web_quotes.txt', 'w') as myfile:
-                print(quotes, file=myfile)
+            logging.info(f'Fetching {len(self.perimeters.get(session, []))} quotes for session {session}')
+            quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters.get(session, set()))
+            try:
+                with open('output/web_quotes.txt', 'w') as myfile:
+                    print(quotes, file=myfile)
+            except Exception:
+                logging.debug('Could not write output/web_quotes.txt')
 
-            for coin in self.perimeters[session]:
+            for coin in self.perimeters.get(session, set()):
                 if coin not in quotes:
                     logging.info(f'Missing {coin} in fetch_ticker result')
 
-            await end_point._exchange_async.close()
-            await bh.close_exchange_async()
             logging.info(f'{len(quotes)} quotes ready for session {session}')
 
             self.quotes[session] = quotes
         except Exception as e:
             self.quotes[session] = {}
-            logging.error(f'Error fetching quotes for session {session}: {e.args[0]}')
+            logging.error(f'Error fetching quotes for session {session}: {str(e)}')
+            logging.error(traceback.format_exc())
+        finally:
+            try:
+                if end_point is not None and hasattr(end_point, '_exchange_async') and end_point._exchange_async is not None:
+                    try:
+                        await end_point._exchange_async.close()
+                    except Exception:
+                        logging.debug('Error closing end_point._exchange_async', exc_info=True)
+            except Exception:
+                logging.debug('Error while attempting to close end_point', exc_info=True)
+
+            try:
+                if bh is not None:
+                    try:
+                        await bh.close_exchange_async()
+                    except Exception:
+                        logging.debug('Error closing broker handler async session', exc_info=True)
+            except Exception:
+                logging.debug('Error while attempting to close broker handler', exc_info=True)
 
     async def update_config(self, session, config_file):
         if os.path.exists(config_file):

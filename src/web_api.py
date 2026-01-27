@@ -289,6 +289,14 @@ if __name__ == '__main__':
     handler.setFormatter(fmt)
     LOGGER.setLevel(level)
     LOGGER.addHandler(handler)
+    filename = filename.parent / 'backend.log'
+    root = logging.getLogger()
+    fh = logging.FileHandler(filename)
+    fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+    root.addHandler(fh)
+    root.setLevel(logging.INFO)
+    # optionally prevent duplicate console output
+    root.propagate = False
 
     started = threading.Event()
     processor = WebProcessor(config)

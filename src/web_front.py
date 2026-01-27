@@ -2,6 +2,7 @@ import os
 import argparse
 import yaml
 import json
+import time
 import requests
 import pandas as pd
 from pywebio import start_server
@@ -448,5 +449,17 @@ if __name__ == '__main__':
     parser.add_argument("--gw_port", help="gateway port", default=14440)
     args = parser.parse_args()
     initialize_globals(args.config, int(args.gw_port))
+
+    # 10-second timer before launching the frontend
+    print('Launching frontend in 10 seconds... (Press Ctrl+C to cancel)')
+    try:
+        for remaining in range(10, 0, -1):
+            print(f'Starting in {remaining} seconds...', end='\r')
+            time.sleep(1)
+        print('Starting frontend now.            ')
+    except KeyboardInterrupt:
+        print('\nLaunch cancelled by user.')
+        raise SystemExit(0)
+
     start_server(main, debug=True, port=int(args.port))
     set_env(title='Tartineur furtif', output_animation=False)

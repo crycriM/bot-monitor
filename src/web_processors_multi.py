@@ -682,16 +682,19 @@ class Processor:
     async def fetch_token_prices(self, exchange_name, tokens):
         """Fetch current prices for a list of tokens from the exchange."""
         params = {'exchange_trade': 'dummy', 'account_trade': 'dummy'}
-        end_point = BrokerHandler.build_end_point(exchange_name, '0')
-        bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params, logging_name='default')
-
+        end_point = None
+        bh = None
         prices = {token: None for token in tokens}
         try:
+            end_point = BrokerHandler.build_end_point(exchange_name, '0')
+            bh = BrokerHandler(market_watch=exchange_name, end_point_trade=end_point, strategy_param=params, logging_name='default')
+
             def universal_name(symbol):
                 token = symbol.replace('USDT', '').replace('-', '').replace('SWAP', '')  # enough for okx, binance, bitget
                 return token + '/USDT:USDT' # universal name for USDT pairs (not for Hyperliquid)
 
             symbol_map = {token: universal_name(token) for token in tokens}
+
             async def fetch_ticker(symbol):
                 try:
                     await asyncio.sleep(np.random.uniform(0, 1))
@@ -713,19 +716,33 @@ class Processor:
                     if exchange_name not in self.price_cache:
                         self.price_cache[exchange_name] = {}
                     self.price_cache[exchange_name][token] = {'price': price, 'timestamp': datetime.utcnow()}
-
                 else:
                     logging.warning(f"No 'last' price in ticker for {token} ({symbol}) on {exchange_name}")
+
             logging.info(f"Updated price cache for {exchange_name}")
-            await end_point._exchange_async.close()
-            await bh.close_exchange_async()
             return prices
         except Exception as e:
             logging.error(f"Error fetching prices for tokens on {exchange_name}: {str(e)}")
             logging.error(traceback.format_exc())
-            await end_point._exchange_async.close()
-            await bh.close_exchange_async()
             return prices
+        finally:
+            try:
+                if end_point is not None and hasattr(end_point, '_exchange_async') and end_point._exchange_async is not None:
+                    try:
+                        await end_point._exchange_async.close()
+                    except Exception:
+                        logging.debug('Error closing end_point._exchange_async in fetch_token_prices', exc_info=True)
+            except Exception:
+                logging.debug('Error while attempting to close end_point in fetch_token_prices', exc_info=True)
+
+            try:
+                if bh is not None:
+                    try:
+                        await bh.close_exchange_async()
+                    except Exception:
+                        logging.debug('Error closing broker handler async session in fetch_token_prices', exc_info=True)
+            except Exception:
+                logging.debug('Error while attempting to close broker handler in fetch_token_prices', exc_info=True)
 
     async def update_prices_and_median(self):
         """Fetch token prices for all tokens in a session at once and compute median position sizes per account_key."""
