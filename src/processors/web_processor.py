@@ -694,7 +694,7 @@ class WebProcessor:
                 matching = pd.concat([current, theo_pos], axis=1).fillna(0)
                 seuil_current = matching['current'].apply(np.abs).max() / 5
                 seuil_theo = matching['theo'].apply(np.abs).max() / 5
-                LOGGER.info('Thresholds for  %s, %s: %f, %f', session, strategy_name, seuil_current, seuil_theo)
+                # Alternative threshold using median position sizes
                 significant = matching[
                     (matching['theo'].apply(np.abs) > seuil_theo) | (matching['current'].apply(np.abs) > seuil_theo)]
                 matching = matching.loc[significant.index]
@@ -821,15 +821,28 @@ class WebProcessor:
 
                     seuil_theo = theo_positions.abs().max() / 5 if len(theo_positions) > 0 else 0
                     seuil_current = real_positions.abs().max() / 5 if len(real_positions) > 0 else 0
+                    # Alternative threshold using median position sizes
+                    median_size = self.median_position_sizes.get(account_key, 0)
+                    seuil_median = median_size * 0.1 if median_size > 0 else 0
+                    seuil_theo = max(seuil_theo, seuil_median)
+                    seuil_current = max(seuil_current, seuil_median)
                     total_factor = 3  # Default factor for threshold multiplication
+                    LOGGER.info(f'{account_key}@{session}: Calculated thresholds - '
+                                f'seuil_theo: {seuil_theo:.2f}, seuil_current: {seuil_current:.2f}, '
+                                f'using median: {seuil_median:.2f}')
 
                     # Filter significant positions
                     significant_theo = set(matching_df[matching_df['theo'].abs() > seuil_theo].index)
                     significant_current = set(matching_df[matching_df['real'].abs() > seuil_current].index)
+                    LOGGER.info(f'{account_key}@{session}: Significant theo positions: {len(significant_theo)},'
+                                f' current: {len(significant_current)}')
+
 
                     # Count long/short positions for balance check
                     n_long_theo = len(matching_df[(matching_df['theo'].abs() > seuil_theo) & (matching_df['theo'] > 0)])
                     n_short_theo = len(matching_df[(matching_df['theo'].abs() > seuil_theo) & (matching_df['theo'] < 0)])
+                    LOGGER.info(f'{account_key}@{session}: Theo balance - Long: {n_long_theo}, Short: {n_short_theo}')
+
 
                     # Check position balance (skip for spot sessions)
                     if n_short_theo != n_long_theo and 'spot' not in session:
@@ -838,7 +851,7 @@ class WebProcessor:
                     if not self.processor_config[session].get('check_realpose', True):
                         continue
 
-                    # Check residual theo exposure
+
                     total_theo_expo = matching_df['theo'].sum()
                     if abs(total_theo_expo) > (seuil_theo * total_factor):
                         message += [f'{account_key}@{session}: Residual theo expo too large ({total_theo_expo:.2f})']
@@ -848,17 +861,24 @@ class WebProcessor:
                     if abs(total_current_expo) > (seuil_current * total_factor):
                         message += [f'{account_key}@{session}: Residual account expo too large ({total_current_expo:.2f})']
 
+                    # Check residual theo exposure
+                    LOGGER.info(f'{account_key}@{session}: Total theo expo: {total_theo_expo:.2f}, current expo: {total_current_expo:.2f}')
+
                     # Check position mismatches for significant positions
                     mismatched_positions = matching_df[matching_df['is_mismatch'] == True]
+                    LOGGER.info(f'{account_key}@{session}: Mismatched positions count: {len(mismatched_positions)}')
+
                     if len(mismatched_positions) > 0:
                         LOGGER.info(f'Found {len(mismatched_positions)} mismatched positions for {account_key}@{session}')
                         for coin in mismatched_positions.index:
                             real_pos = mismatched_positions.loc[coin, 'real']
                             theo_pos = mismatched_positions.loc[coin, 'theo']
                             rel_delta = mismatched_positions.loc[coin, 'rel_delta']
-                            message += [f'{account_key}@{session}: Position mismatch for {coin} - Real: {real_pos:.2f}, Theo: {theo_pos:.2f}, Rel delta: {rel_delta:.2%}']
+                            message += [f'{account_key}@{session}: Position mismatch for {coin} - Real: {real_pos:.2f},'
+                                        f'Theo: {theo_pos:.2f}, Rel delta: {rel_delta:.2%}']
 
-                    # Check for positions that should exist but don't
+
+        # Check for positions that should exist but don't
                     theo_only = significant_theo.difference(significant_current)
                     if len(theo_only) > 0:
                         message += [f'Discrepancy {account_key}@{session}: {theo_only} have no position in exchange account but should']

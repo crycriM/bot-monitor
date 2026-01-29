@@ -70,6 +70,7 @@ if [ "$LAUNCH_BACKEND" = "yes" ]; then
     python $EXE_DIR/src/web_api.py --config "$CONFIG_FILE" &
     BACKEND_PID=$!
     echo "Backend started with PID: $BACKEND_PID"
+    echo $BACKEND_PID > /tmp/backend.pid
     
     # Give backend time to start
     sleep 2
@@ -114,8 +115,10 @@ if [ "$DASHBOARD" = "streamlit" ]; then
     streamlit run $EXE_DIR/src/web_front_sl.py \
         --server.port "$STREAMLIT_PORT" \
         --logger.level=info \
-        -- --config "$CONFIG_FILE" --gw_port "$GW_PORT"
-    
+        -- --config "$CONFIG_FILE" --gw_port "$GW_PORT" &
+    DASHBOARD_PID=$!
+    echo $DASHBOARD_PID > /tmp/dashboard.pid
+
     # Kill backend if we started it
     if [ ! -z "$BACKEND_PID" ]; then
         echo "Stopping backend..."
