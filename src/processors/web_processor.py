@@ -37,6 +37,7 @@ class WebProcessor:
     '''
 
     def __init__(self, config):
+        global LOGGER
         fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
         filename = config.get('logs', {}).get('file', '~/logs/web_processor.log')
         level = config.get('logs', {}).get('level', 'INFO')

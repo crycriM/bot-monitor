@@ -258,8 +258,6 @@ def runner(event, processor, pace):
 
 if __name__ == '__main__':
     load_dotenv()
-    LOGGER = logging.getLogger('web_processor')
-        
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="input file", default='')
     args = parser.parse_args()
