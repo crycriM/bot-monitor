@@ -1,6 +1,6 @@
 logs:
   level: INFO
-  file: ~/logs/web_processor.log
+  file: ~/web_processor.log
   backup_count: 5
 pace:
   CHECK: 600

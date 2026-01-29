@@ -821,6 +821,24 @@ class WebProcessor:
                     if matching_df.empty:
                         continue
 
+                    # Check and fill missing prices from cache
+                    if 'price' in matching_df.columns:
+                        nan_prices = matching_df['price'].isna()
+                        if nan_prices.any():
+                            nan_count = nan_prices.sum()
+                            LOGGER.info(f'Found {nan_count} NaN prices in {session}:{account_key}')
+                            session_prices = self.price_cache.get(session, {})
+                            for coin_name in matching_df[nan_prices].index:
+                                if coin_name in session_prices:
+                                    cached_price = session_prices[coin_name].get('price')
+                                    if cached_price is not None:
+                                        matching_df.loc[coin_name, 'price'] = cached_price
+                                        LOGGER.debug(f'Filled price for {coin_name} from cache: {cached_price}')
+                                    else:
+                                        LOGGER.warning(f'Price cache entry for {coin_name} has no price value')
+                                else:
+                                    LOGGER.warning(f'Coin {coin_name} not found in price cache for {session}')
+
                     # Calculate thresholds based on significant positions
                     theo_values = (matching_df['theo'] * matching_df['price']).dropna()
                     real_values = (matching_df['real'] * matching_df['price']).dropna()
