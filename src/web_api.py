@@ -64,11 +64,6 @@ def runner(event, processor, pace):
             report = await processor.multiply(exchange, account, factor)
             return JSONResponse(report)
 
-        @app.get('/dashboard')
-        async def read_dashboard(session: str = 'bitget'):
-            report = processor.get_dashboard(session=session)
-            return JSONResponse(report)
-
         @app.get('/status')
         async def read_status():
             report = processor.get_status()
