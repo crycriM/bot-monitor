@@ -67,7 +67,6 @@ class WebProcessor:
         self.pnl = {}
         self.latent = {}
         self.matching = {}
-        self.dashboard = {}
         self.last_message_count = 0
         self.last_message = []
         self.used_accounts = {}  # key is session name, value is key=strat_name, value=account used
@@ -668,58 +667,58 @@ class WebProcessor:
         except Exception as e:
             LOGGER.warning(f'Exception {e.args[0]} during update_summary of account {session}.{strategy_name}')
 
-    async def update_account(self, session, strategy_name, strategy_param):
-        destination = strategy_param['send_orders']
-        LOGGER.info('updating account for %s, %s', session, strategy_name)
-        if session not in self.matching:
-            self.matching[session] = {}
-        account = strategy_param['account_trade']
-
-        trade_exchange = strategy_param['exchange_trade']
-        try:
-            if destination != 'dummy':
-                all_positions = await self.get_account_position(trade_exchange, account)
-                if 'pose' not in all_positions:
-                    LOGGER.info('empty account for %s, %s', session, strategy_name)
-                    return
-                positions = all_positions['pose']
-                theo = {coin: pose for coin, pose in self.summaries[session][strategy_name]['theo']['coins'].items() if
-                        pose != 0}
-                current = pd.DataFrame({coin: value['amount'] for coin, value in positions.items()}, index=['current']).T
-                theo_pos = pd.DataFrame({coin: value['amount'] for coin, value in theo.items()}, index=['theo']).T
-                current_ts = pd.DataFrame({coin: value.get('entry_ts', np.nan) for coin, value in positions.items()},
-                                          index=['current_entry_ts']).T
-                theo_ts = pd.DataFrame({coin: value['entry_ts'] for coin, value in theo.items()}, index=['theo_ts']).T
-
-                matching = pd.concat([current, theo_pos], axis=1).fillna(0)
-                seuil_current = matching['current'].apply(np.abs).max() / 5
-                seuil_theo = matching['theo'].apply(np.abs).max() / 5
-                # Alternative threshold using median position sizes
-                significant = matching[
-                    (matching['theo'].apply(np.abs) > seuil_theo) | (matching['current'].apply(np.abs) > seuil_theo)]
-                matching = matching.loc[significant.index]
-                matching.loc['Total'] = matching.sum(axis=0)
-                nLong = current[(current.apply(np.abs) > seuil_current) & (current > 0)].count()['current']
-                nShort = current[(current.apply(np.abs) > seuil_current) & (current < 0)].count()['current']
-                matching.loc['nLong', 'current'] = nLong
-                matching.loc['nShort', 'current'] = nShort
-                nLong = theo_pos[(theo_pos.apply(np.abs) > seuil_theo) & (theo_pos > 0)].count()['theo']
-                nShort = theo_pos[(theo_pos.apply(np.abs) > seuil_theo) & (theo_pos < 0)].count()['theo']
-                matching.loc['nLong', 'theo'] = nLong
-                matching.loc['nShort', 'theo'] = nShort
-
-                matching['current_ts'] = current_ts
-                matching['theo_ts'] = theo_ts
-                if 'USDT total' in all_positions:
-                    balance = all_positions['USDT total']
-                else:
-                    balance = np.nan
-                matching.loc['USDT total'] = balance, np.nan, '', ''
-
-                self.matching[session].update({strategy_name: matching})
-        except Exception as e:
-            LOGGER.error(f'Exception {e.args[0]} for account {session}.{strategy_name}')
-
+    # async def update_account(self, session, strategy_name, strategy_param):
+    #     destination = strategy_param['send_orders']
+    #     LOGGER.info('updating account for %s, %s', session, strategy_name)
+    #     if session not in self.matching:
+    #         self.matching[session] = {}
+    #     account = strategy_param['account_trade']
+    #
+    #     trade_exchange = strategy_param['exchange_trade']
+    #     try:
+    #         if destination != 'dummy':
+    #             all_positions = await self.get_account_position(trade_exchange, account)
+    #             if 'pose' not in all_positions:
+    #                 LOGGER.info('empty account for %s, %s', session, strategy_name)
+    #                 return
+    #             positions = all_positions['pose']
+    #             theo = {coin: pose for coin, pose in self.summaries[session][strategy_name]['theo']['coins'].items() if
+    #                     pose != 0}
+    #             current = pd.DataFrame({coin: value['amount'] for coin, value in positions.items()}, index=['current']).T
+    #             theo_pos = pd.DataFrame({coin: value['amount'] for coin, value in theo.items()}, index=['theo']).T
+    #             current_ts = pd.DataFrame({coin: value.get('entry_ts', np.nan) for coin, value in positions.items()},
+    #                                       index=['current_entry_ts']).T
+    #             theo_ts = pd.DataFrame({coin: value['entry_ts'] for coin, value in theo.items()}, index=['theo_ts']).T
+    #
+    #             matching = pd.concat([current, theo_pos], axis=1).fillna(0)
+    #             seuil_current = matching['current'].apply(np.abs).max() / 5
+    #             seuil_theo = matching['theo'].apply(np.abs).max() / 5
+    #             # Alternative threshold using median position sizes
+    #             significant = matching[
+    #                 (matching['theo'].apply(np.abs) > seuil_theo) | (matching['current'].apply(np.abs) > seuil_theo)]
+    #             matching = matching.loc[significant.index]
+    #             matching.loc['Total'] = matching.sum(axis=0)
+    #             nLong = current[(current.apply(np.abs) > seuil_current) & (current > 0)].count()['current']
+    #             nShort = current[(current.apply(np.abs) > seuil_current) & (current < 0)].count()['current']
+    #             matching.loc['nLong', 'current'] = nLong
+    #             matching.loc['nShort', 'current'] = nShort
+    #             nLong = theo_pos[(theo_pos.apply(np.abs) > seuil_theo) & (theo_pos > 0)].count()['theo']
+    #             nShort = theo_pos[(theo_pos.apply(np.abs) > seuil_theo) & (theo_pos < 0)].count()['theo']
+    #             matching.loc['nLong', 'theo'] = nLong
+    #             matching.loc['nShort', 'theo'] = nShort
+    #
+    #             matching['current_ts'] = current_ts
+    #             matching['theo_ts'] = theo_ts
+    #             if 'USDT total' in all_positions:
+    #                 balance = all_positions['USDT total']
+    #             else:
+    #                 balance = np.nan
+    #             matching.loc['USDT total'] = balance, np.nan, '', ''
+    #
+    #             self.matching[session].update({strategy_name: matching})
+    #     except Exception as e:
+    #         LOGGER.error(f'Exception {e.args[0]} for account {session}.{strategy_name}')
+    #
     async def check_latent(self):
         message = []
         for session, params in self.session_configs.items():
@@ -934,9 +933,6 @@ class WebProcessor:
 
     def get_status(self):
         return self.summaries
-
-    # def get_dashboard(self, session):
-    #     return self.dashboard
 
     def get_pnl(self):
         return self.pnl
