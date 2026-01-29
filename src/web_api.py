@@ -23,7 +23,7 @@ from shared_utils.bot_reporting import TGMessenger
 
 app = None
 
-LOGGER = logging.getLogger('web_processor')
+LOGGER = logging.getLogger(__name__)
 
 
 def runner(event, processor, pace):
@@ -281,22 +281,13 @@ if __name__ == '__main__':
     pace = config.get('pace', {'REFRESH': 180, 'MATCHING': 60, 'PRICE_UPDATE': 600, 'RUNNING': 300})
     fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
     filename = config.get('logs', {}).get('file', '~/logs/web_processor.log')
-    level = config.get('logs', {}).get('level', 'INFO')
-    backup_count = config.get('logs', {}).get('backup_count', 7)
     filename = Path(filename).expanduser()
-    handler = logging.handlers.TimedRotatingFileHandler(filename=filename,
-                                                       when="midnight", interval=1, backupCount=backup_count)
-    handler.setFormatter(fmt)
-    LOGGER.setLevel(level)
-    LOGGER.addHandler(handler)
     filename = filename.parent / 'backend.log'
-    root = logging.getLogger()
     fh = logging.FileHandler(filename)
-    fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-    root.addHandler(fh)
-    root.setLevel(logging.INFO)
-    # optionally prevent duplicate console output
-    root.propagate = False
+    fh.setFormatter(fmt)
+    level = config.get('logs', {}).get('level', 'INFO')
+    LOGGER.setLevel(level)
+    LOGGER.addHandler(fh)
 
     started = threading.Event()
     processor = WebProcessor(config)
