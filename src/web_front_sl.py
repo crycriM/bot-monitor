@@ -174,12 +174,14 @@ def create_pnl_tab():
     if 'pnl_df' in ss:
         st.subheader('Mean Theoretical PnL')
         df_display = replace_na_with_nan(ss['pnl_df'].reset_index())
+        df_display = df_display.dropna(how='all')
         st.dataframe(df_display, width='stretch', height=400)
 
         st.divider()
 
         st.subheader('Pivot Summary')
         pivot_display = replace_na_with_nan(ss['pnl_pivot'].reset_index())
+        pivot_display = pivot_display.dropna(how='all')
         st.dataframe(pivot_display, width='stretch', height=400)
 
 
@@ -259,6 +261,7 @@ def create_matching_tab():
 
         # Mismatched positions
         mismatch = main_df[main_df['is_mismatch']][['token', 'theo_amount', 'real_amount']]
+        mismatch = mismatch.dropna(how='all')
         if not mismatch.empty:
             st.subheader('⚠️ Mismatched Positions')
             st.dataframe(mismatch.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}), 
@@ -267,6 +270,7 @@ def create_matching_tab():
 
         # Dust positions
         dust = main_df[main_df['is_dust']][['token', 'real_amount']]
+        dust = dust.dropna(how='all')
         if not dust.empty:
             st.subheader('Dust Positions')
             st.dataframe(dust.style.format({'real_amount': '{:.1f}'}), width=600, height=400)
@@ -284,7 +288,7 @@ def create_matching_tab():
 
         # All positions table
         st.subheader('All Positions')
-        positions_df = main_df[['token', 'theo_amount', 'real_amount']]
+        positions_df = main_df[['token', 'theo_amount', 'real_amount']].dropna(how='all')
         st.dataframe(positions_df.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}),
                     width=600, height=400)
 
