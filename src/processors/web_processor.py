@@ -822,14 +822,14 @@ class WebProcessor:
                         continue
 
                     # Calculate thresholds based on significant positions
-                    theo_positions = matching_df['theo'].dropna()
-                    real_positions = matching_df['real'].dropna()
+                    theo_values = (matching_df['theo'] * matching_df['price']).dropna()
+                    real_values = (matching_df['real'] * matching_df['price']).dropna()
 
-                    if len(theo_positions) == 0 and len(real_positions) == 0:
+                    if len(theo_values) == 0 and len(real_values) == 0:
                         continue
 
-                    seuil_theo = theo_positions.abs().max() / 5 if len(theo_positions) > 0 else 0
-                    seuil_current = real_positions.abs().max() / 5 if len(real_positions) > 0 else 0
+                    seuil_theo = theo_values.abs().max() / 5 if len(theo_values) > 0 else 0
+                    seuil_current = real_values.abs().max() / 5 if len(real_values) > 0 else 0
                     # Alternative threshold using median position sizes
                     median_size = self.median_position_sizes.get(account_key, 0)
                     seuil_median = median_size * 0.1 if median_size > 0 else 0
@@ -841,15 +841,16 @@ class WebProcessor:
                                 f'using median: {seuil_median:.2f}')
 
                     # Filter significant positions
-                    significant_theo = set(matching_df[matching_df['theo'].abs() > seuil_theo].index)
-                    significant_current = set(matching_df[matching_df['real'].abs() > seuil_current].index)
+                    abs_theo_values = (matching_df['theo'] * matching_df['price']).abs()
+                    abs_real_values = (matching_df['real'] * matching_df['price']).abs()
+                    significant_theo = set(matching_df[abs_theo_values > seuil_theo].index)
+                    significant_current = set(matching_df[abs_real_values > seuil_current].index)
                     LOGGER.info(f'{account_key}@{session}: Significant theo positions: {len(significant_theo)},'
                                 f' current: {len(significant_current)}')
 
-
                     # Count long/short positions for balance check
-                    n_long_theo = len(matching_df[(matching_df['theo'].abs() > seuil_theo) & (matching_df['theo'] > 0)])
-                    n_short_theo = len(matching_df[(matching_df['theo'].abs() > seuil_theo) & (matching_df['theo'] < 0)])
+                    n_long_theo = len(matching_df[(abs_theo_values > seuil_theo) & (matching_df['theo'] > 0)])
+                    n_short_theo = len(matching_df[(abs_theo_values > seuil_theo) & (matching_df['theo'] < 0)])
                     LOGGER.info(f'{account_key}@{session}: Theo balance - Long: {n_long_theo}, Short: {n_short_theo}')
 
 
@@ -860,13 +861,12 @@ class WebProcessor:
                     if not self.processor_config[session].get('check_realpose', True):
                         continue
 
-
-                    total_theo_expo = matching_df['theo'].sum()
+                    total_theo_expo = (matching_df['theo'] * matching_df['price']).fillna(0).sum()
                     if abs(total_theo_expo) > (seuil_theo * total_factor):
                         message += [f'{account_key}@{session}: Residual theo expo too large ({total_theo_expo:.2f})']
 
                     # Check residual account exposure
-                    total_current_expo = matching_df['real'].sum()
+                    total_current_expo = (matching_df['real'] * matching_df['price']).fillna(0).sum()
                     if abs(total_current_expo) > (seuil_current * total_factor):
                         message += [f'{account_key}@{session}: Residual account expo too large ({total_current_expo:.2f})']
 
