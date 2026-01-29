@@ -119,11 +119,6 @@ if [ "$DASHBOARD" = "streamlit" ]; then
     DASHBOARD_PID=$!
     echo $DASHBOARD_PID > /tmp/dashboard.pid
 
-    # Kill backend if we started it
-    if [ ! -z "$BACKEND_PID" ]; then
-        echo "Stopping backend..."
-        kill $BACKEND_PID 2>/dev/null
-    fi
 # elif [ "$DASHBOARD" = "nicegui" ]; then
 #     echo "Starting NiceGUI dashboard..."
 #     echo "  Config: $CONFIG_FILE"
