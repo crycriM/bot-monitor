@@ -26,7 +26,7 @@ from shared_utils.online import parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler
 from trading_bot.web_broker import WebSpreaderBroker
 
-LOGGER = logging.getLogger('web_processor')
+LOGGER = logging.getLogger(__name__)
 
 class WebProcessor:
     '''
@@ -37,7 +37,6 @@ class WebProcessor:
     '''
 
     def __init__(self, config):
-        global LOGGER
         fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
         filename = config.get('logs', {}).get('file', '~/logs/web_processor.log')
         level = config.get('logs', {}).get('level', 'INFO')
@@ -842,19 +841,19 @@ class WebProcessor:
 
                     # Calculate thresholds based on significant positions
                     # Ensure numeric multiplication (avoid sequence * float TypeError)
-                    theo_series = pd.to_numeric(matching_df['theo'], errors='coerce')
-                    real_series = pd.to_numeric(matching_df['real'], errors='coerce')
-                    price_series = pd.to_numeric(matching_df['price'], errors='coerce')
+                    matching_df['theo'] = pd.to_numeric(matching_df['theo'], errors='coerce')
+                    matching_df['real'] = pd.to_numeric(matching_df['real'], errors='coerce')
+                    matching_df['price'] = pd.to_numeric(matching_df['price'], errors='coerce')
                     # compute values and drop NaN/inf
-                    theo_values = (theo_series * price_series).replace([np.inf, -np.inf], np.nan).dropna()
-                    real_values = (real_series * price_series).replace([np.inf, -np.inf], np.nan).dropna()
+                    theo_values = (matching_df['theo'] * matching_df['price']).replace([np.inf, -np.inf], np.nan).dropna()
+                    real_values = (matching_df['real'] * matching_df['price']).replace([np.inf, -np.inf], np.nan).dropna()
                     # Log if any non-numeric entries were coerced
-                    if theo_series.isna().any():
-                        LOGGER.debug(f'{account_key}@{session}: Non-numeric theo entries coerced to NaN for {theo_series.isna().sum()} rows')
-                    if real_series.isna().any():
-                        LOGGER.debug(f'{account_key}@{session}: Non-numeric real entries coerced to NaN for {real_series.isna().sum()} rows')
-                    if price_series.isna().any():
-                        LOGGER.debug(f'{account_key}@{session}: Non-numeric price entries coerced to NaN for {price_series.isna().sum()} rows')
+                    if matching_df['theo'].isna().any():
+                        LOGGER.debug(f'{account_key}@{session}: Non-numeric theo entries coerced to NaN for {matching_df["theo"].isna().sum()} rows')
+                    if matching_df['real'].isna().any():
+                        LOGGER.debug(f'{account_key}@{session}: Non-numeric real entries coerced to NaN for {matching_df["real"].isna().sum()} rows')
+                    if matching_df['price'].isna().any():
+                        LOGGER.debug(f'{account_key}@{session}: Non-numeric price entries coerced to NaN for {matching_df["price"].isna().sum()} rows')
 
                     if len(theo_values) == 0 and len(real_values) == 0:
                         continue
