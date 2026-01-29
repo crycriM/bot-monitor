@@ -37,6 +37,16 @@ class WebProcessor:
     '''
 
     def __init__(self, config):
+        fmt = logging.Formatter('{asctime}:{levelname}:{name}:{message}', style='{')
+        filename = config.get('logs', {}).get('file', '~/logs/web_processor.log')
+        level = config.get('logs', {}).get('level', 'INFO')
+        filename = Path(filename).expanduser()
+        fh = logging.FileHandler(filename)
+        fh.setFormatter(fmt)
+        LOGGER.setLevel(level)
+        LOGGER.addHandler(fh)
+        LOGGER.propagate = False
+
         self.processor_config = config['session']
         self.config_files = {session: Path(self.processor_config[session]['config_file']).expanduser() for session in self.processor_config}
         self.config_position_matching_files = {session: Path(self.processor_config[session]['config_position_matching_file']).expanduser() for session in self.processor_config}

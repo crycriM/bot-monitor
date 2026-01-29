@@ -135,6 +135,7 @@ def runner(event, processor, pace):
         # Recalculate median position sizes with fresh prices
         processor.median_position_sizes = calculate_median_position_sizes(
             processor.account_theo_pos, processor.quotes)
+        await check(processor.check_all())
 
     async def send_alert(message):
         if message is not None:
@@ -185,7 +186,6 @@ def runner(event, processor, pace):
                 processor.update_account_multi()
                 for sess in processor.session_configs:
                     processor.do_matching(sess)
-                await check(processor.check_all())
 
             elif file_type == SignalType.STATE_FILE:
                 LOGGER.info(f'State file changed: {file_path}')
@@ -280,9 +280,11 @@ if __name__ == '__main__':
     filename = filename.parent / 'backend.log'
     fh = logging.FileHandler(filename)
     fh.setFormatter(fmt)
+
     level = config.get('logs', {}).get('level', 'INFO')
     LOGGER.setLevel(level)
     LOGGER.addHandler(fh)
+    LOGGER.propagate = False
 
     started = threading.Event()
     processor = WebProcessor(config)
