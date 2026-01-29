@@ -237,7 +237,7 @@ def create_matching_tab():
 
         # Exposure Summary
         st.subheader('Exposure Summary')
-        st.dataframe(summary_df, width='stretch', height=400)
+        st.dataframe(summary_df, width=600, height=400)
 
         st.divider()
 
@@ -253,7 +253,7 @@ def create_matching_tab():
             'Theo Positions': [count_pos_th, count_neg_th],
             'Real Positions': [count_pos, count_neg],
         }, index=['long#', 'short#'])
-        st.dataframe(tc, width='stretch', height=200)
+        st.dataframe(tc, width=600, height=200)
 
         st.divider()
 
@@ -262,14 +262,14 @@ def create_matching_tab():
         if not mismatch.empty:
             st.subheader('⚠️ Mismatched Positions')
             st.dataframe(mismatch.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}), 
-                        width='stretch', height=400)
+                        width=600, height=400)
             st.divider()
 
         # Dust positions
         dust = main_df[main_df['is_dust']][['token', 'real_amount']]
         if not dust.empty:
             st.subheader('Dust Positions')
-            st.dataframe(dust.style.format({'real_amount': '{:.1f}'}), width='stretch', height=400)
+            st.dataframe(dust.style.format({'real_amount': '{:.1f}'}), width=600, height=400)
             st.divider()
 
         # Load HTML figures from temp folder
@@ -285,8 +285,8 @@ def create_matching_tab():
         # All positions table
         st.subheader('All Positions')
         positions_df = main_df[['token', 'theo_amount', 'real_amount']]
-        st.dataframe(positions_df.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}), 
-                    width='stretch', height=400)
+        st.dataframe(positions_df.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}),
+                    width=600, height=400)
 
 
 def create_multiply_tab():
@@ -341,20 +341,32 @@ def main():
         initial_sidebar_state='expanded'
     )
 
+    # Dark background theme
+    st.markdown("""
+    <style>
+    body {
+        background-color: #0e1117;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Title
     st.title('🎯 Tartineur furtif')
 
     # Create tabs
-    tab1, tab2, tab3 = st.tabs(['📊 PnL', '🔄 Matching', '✖️ Multiply'])
+    # Create tabs (disabled multiply tab)
+
+    tab1, tab2 = st.tabs(['📊 PnL', '🔄 Matching'])
 
     with tab1:
         create_pnl_tab()
 
     with tab2:
         create_matching_tab()
-
-    with tab3:
-        create_multiply_tab()
+    #
+    # with tab3:
+    #     create_multiply_tab()
 
 
 if __name__ == '__main__':
