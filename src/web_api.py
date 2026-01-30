@@ -207,6 +207,8 @@ def runner(event, processor, pace):
 
         # Initialize: load all data once, build file registry, start watchers
         LOGGER.info('Performing initial data load')
+        # Fetch fresh prices first, then do matching with those prices
+        await refresh_quotes()
         await refresh(with_matching=True)  # Enable matching to detect initial mismatches
 
         processor.build_watched_files_registry()
@@ -218,8 +220,6 @@ def runner(event, processor, pace):
         web_runner = asyncio.create_task(run_web_processor())
         quote_runner = asyncio.create_task(heartbeat_price_update(task_queue, pace['PRICE_UPDATE']))
         validation_runner = asyncio.create_task(heartbeat_validation(processor, pace['CHECK'], task_queue))  # 10 min validation
-        # Delay first quote fetch so API starts immediately
-        initial_quote_runner = asyncio.create_task(refresh_quotes())
 
         LOGGER.info('Event loop started, processing file events')
 
