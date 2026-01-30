@@ -77,8 +77,6 @@ class WebProcessor:
         self.pnl = {}
         self.latent = {}
         self.matching = {}
-        self.last_message_count = 0
-        self.last_message = []
         self.used_accounts = {}  # key is session name, value is key=strat_name, value=account used
         self.account_theo_pos = {}
         self.account_real_pos = {}
@@ -678,58 +676,7 @@ class WebProcessor:
         except Exception as e:
             LOGGER.warning(f'Exception {e.args[0]} during update_summary of account {session}.{strategy_name}')
 
-    # async def update_account(self, session, strategy_name, strategy_param):
-    #     destination = strategy_param['send_orders']
-    #     LOGGER.info('updating account for %s, %s', session, strategy_name)
-    #     if session not in self.matching:
-    #         self.matching[session] = {}
-    #     account = strategy_param['account_trade']
-    #
-    #     trade_exchange = strategy_param['exchange_trade']
-    #     try:
-    #         if destination != 'dummy':
-    #             all_positions = await self.get_account_position(trade_exchange, account)
-    #             if 'pose' not in all_positions:
-    #                 LOGGER.info('empty account for %s, %s', session, strategy_name)
-    #                 return
-    #             positions = all_positions['pose']
-    #             theo = {coin: pose for coin, pose in self.summaries[session][strategy_name]['theo']['coins'].items() if
-    #                     pose != 0}
-    #             current = pd.DataFrame({coin: value['amount'] for coin, value in positions.items()}, index=['current']).T
-    #             theo_pos = pd.DataFrame({coin: value['amount'] for coin, value in theo.items()}, index=['theo']).T
-    #             current_ts = pd.DataFrame({coin: value.get('entry_ts', np.nan) for coin, value in positions.items()},
-    #                                       index=['current_entry_ts']).T
-    #             theo_ts = pd.DataFrame({coin: value['entry_ts'] for coin, value in theo.items()}, index=['theo_ts']).T
-    #
-    #             matching = pd.concat([current, theo_pos], axis=1).fillna(0)
-    #             seuil_current = matching['current'].apply(np.abs).max() / 5
-    #             seuil_theo = matching['theo'].apply(np.abs).max() / 5
-    #             # Alternative threshold using median position sizes
-    #             significant = matching[
-    #                 (matching['theo'].apply(np.abs) > seuil_theo) | (matching['current'].apply(np.abs) > seuil_theo)]
-    #             matching = matching.loc[significant.index]
-    #             matching.loc['Total'] = matching.sum(axis=0)
-    #             nLong = current[(current.apply(np.abs) > seuil_current) & (current > 0)].count()['current']
-    #             nShort = current[(current.apply(np.abs) > seuil_current) & (current < 0)].count()['current']
-    #             matching.loc['nLong', 'current'] = nLong
-    #             matching.loc['nShort', 'current'] = nShort
-    #             nLong = theo_pos[(theo_pos.apply(np.abs) > seuil_theo) & (theo_pos > 0)].count()['theo']
-    #             nShort = theo_pos[(theo_pos.apply(np.abs) > seuil_theo) & (theo_pos < 0)].count()['theo']
-    #             matching.loc['nLong', 'theo'] = nLong
-    #             matching.loc['nShort', 'theo'] = nShort
-    #
-    #             matching['current_ts'] = current_ts
-    #             matching['theo_ts'] = theo_ts
-    #             if 'USDT total' in all_positions:
-    #                 balance = all_positions['USDT total']
-    #             else:
-    #                 balance = np.nan
-    #             matching.loc['USDT total'] = balance, np.nan, '', ''
-    #
-    #             self.matching[session].update({strategy_name: matching})
-    #     except Exception as e:
-    #         LOGGER.error(f'Exception {e.args[0]} for account {session}.{strategy_name}')
-    #
+
     async def check_latent(self):
         message = []
         for session, params in self.session_configs.items():
@@ -914,6 +861,23 @@ class WebProcessor:
                             real_pos = mismatched_positions.loc[coin, 'real']
                             theo_pos = mismatched_positions.loc[coin, 'theo']
                             rel_delta = mismatched_positions.loc[coin, 'rel_delta']
+
+                            # Ensure numeric values for formatting
+                            try:
+                                real_pos = float(real_pos) if real_pos is not None and str(real_pos) != 'nan' else 0.0
+                            except (ValueError, TypeError):
+                                real_pos = 0.0
+
+                            try:
+                                theo_pos = float(theo_pos) if theo_pos is not None and str(theo_pos) != 'nan' else 0.0
+                            except (ValueError, TypeError):
+                                theo_pos = 0.0
+
+                            try:
+                                rel_delta = float(rel_delta) if rel_delta is not None and str(rel_delta) != 'nan' else 0.0
+                            except (ValueError, TypeError):
+                                rel_delta = 0.0
+
                             message += [f'{account_key}@{session}: Position mismatch for {coin} - Real: {real_pos:.2f},'
                                         f'Theo: {theo_pos:.2f}, Rel delta: {rel_delta:.2%}']
 
