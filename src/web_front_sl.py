@@ -290,7 +290,7 @@ def create_matching_tab():
 
         # All positions table
         st.subheader('All Positions')
-        positions_df = main_df[['token', 'theo_amount', 'real_amount']].dropna(how='all')
+        positions_df = main_df[['token', 'theo_amount', 'real_amount']].dropna(how='all').reset_index(drop=True)
         st.dataframe(positions_df.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}),
                     width=600, height=400)
 
