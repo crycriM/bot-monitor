@@ -221,6 +221,7 @@ class WebProcessor:
             columns={0: 'real', 1: 'theo', 2: 'price'})
 
         match = match.dropna(subset=['real', 'theo'], how='all')
+        match = match.drop(index=['equity', 'exposure'], errors='ignore')
         match[['real', 'theo']] = match[['real', 'theo']].fillna(0)
         real_amnt = match['real'] * match['price']
         theo_amnt = match['theo'] * match['price']
@@ -261,7 +262,6 @@ class WebProcessor:
 
     async def _fetch_all_tickers(self, bh, end_point, perimeter):
         quotes = {}
-        LOGGER.info(f'Perimeter size: {len(perimeter)}, items: {list(perimeter)[:5]}...')  # Log first 5 for brevity
 
         if end_point._exchange_async.has.get('fetchTickers', False):
             LOGGER.info(f'entering fetchTickers')
@@ -269,37 +269,27 @@ class WebProcessor:
             for coin in perimeter:
                 ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
                 tickers.append(ticker)
-            LOGGER.info(f'Built tickers list: {len(tickers)} items, first 5: {tickers[:5]}')
             result = await end_point._exchange_async.fetchTickers(tickers)
-            LOGGER.info(f'fetchTickers result size: {len(result)}')
 
             for coin in perimeter:
                 ticker, _ = bh.symbol_to_market_with_factor(coin, universal=True)
                 symbol, _ = bh.symbol_to_market_with_factor(ticker, universal=False)
                 if ticker in result:
                     info = result[ticker]
-                    price = info.get('last', None)
-                    LOGGER.debug(f'Coin {coin}, ticker {ticker}, symbol {symbol}, price {price}')
                 else:
                     info = {}
-                    price = None
-                    LOGGER.warning(f'Ticker {ticker} not found in result for coin {coin}')
-                quotes[symbol] = price
+                quotes[symbol] = info.get('last', None)
         else:
             LOGGER.info(f'entering fetch Ticker loop')
             for coin in perimeter:
                 symbol = bh.symbol_to_market_with_factor(coin)[0]
-                LOGGER.debug(f'Fetching ticker for coin {coin}, symbol {symbol}')
                 ticker = await end_point._exchange_async.fetch_ticker(symbol)
                 if 'last' in ticker:
                     price = ticker['last']
-                    LOGGER.debug(f'Fetched price {price} for {symbol}')
                 else:
                     price = None
-                    LOGGER.warning(f'No last price in ticker for {symbol}: {ticker}')
                 quotes[symbol] = price
                 await asyncio.sleep(0.2)
-        LOGGER.info(f'Final quotes size: {len(quotes)}')
         return quotes
 
     async def fetch_quotes(self, session):
@@ -323,10 +313,10 @@ class WebProcessor:
             LOGGER.info(f'Fetching {len(self.perimeters.get(session, []))} quotes for session {session}')
             quotes = await self._fetch_all_tickers(bh, end_point, self.perimeters.get(session, set()))
             try:
-                with open('output/web_quotes.txt', 'w') as myfile:
+                with open(f'output/web_quotes_{session}.txt', 'w') as myfile:
                     print(quotes, file=myfile)
             except Exception:
-                LOGGER.debug('Could not write output/web_quotes.txt')
+                LOGGER.debug(f'Could not write output/web_quotes_{session}.txt')
 
             for coin in self.perimeters.get(session, set()):
                 if coin not in quotes:

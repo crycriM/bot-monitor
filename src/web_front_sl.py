@@ -239,7 +239,8 @@ def create_matching_tab():
 
         # Exposure Summary
         st.subheader('Exposure Summary')
-        st.dataframe(summary_df, width=600, height=400)
+        summary_display = summary_df.dropna(how='all')
+        st.dataframe(summary_display, width=600, height=400)
 
         st.divider()
 
@@ -255,6 +256,7 @@ def create_matching_tab():
             'Theo Positions': [count_pos_th, count_neg_th],
             'Real Positions': [count_pos, count_neg],
         }, index=['long#', 'short#'])
+        tc = tc.dropna(how='all')
         st.dataframe(tc, width=600, height=200)
 
         st.divider()
