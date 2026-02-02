@@ -103,6 +103,54 @@ def runner(event, processor, pace):
             #     else:
             #         return HTMLResponse('N/A')
 
+        @app.get('/api/graph-data/{session}/{account_key}')
+        async def get_graph_data(session: str, account_key: str):
+            '''Return JSON graph data for Streamlit visualization'''
+            try:
+                if session not in processor.graph_data or account_key not in processor.graph_data[session]:
+                    return JSONResponse({
+                        'session': session,
+                        'account_key': account_key,
+                        'error': 'No graph data available',
+                        'data': {}
+                    })
+
+                graph_info = processor.graph_data[session][account_key]
+                return JSONResponse({
+                    'session': session,
+                    'account_key': account_key,
+                    'timestamp': graph_info.get('timestamp', ''),
+                    'data': graph_info
+                })
+            except Exception as e:
+                LOGGER.error(f'Error getting graph data: {e}')
+                return JSONResponse({
+                    'session': session,
+                    'account_key': account_key,
+                    'error': str(e),
+                    'data': {}
+                }, status_code=500)
+
+        @app.get('/api/available-accounts')
+        async def get_available_accounts():
+            '''Return list of sessions and accounts with available data'''
+            try:
+                accounts = {}
+                for session in processor.used_accounts:
+                    accounts[session] = list(processor.used_accounts[session].keys())
+
+                return JSONResponse({
+                    'sessions': list(processor.session_configs.keys()),
+                    'accounts': accounts,
+                    'graph_data_available': {
+                        session: list(processor.graph_data.get(session, {}).keys())
+                        for session in processor.session_configs.keys()
+                    }
+                })
+            except Exception as e:
+                LOGGER.error(f'Error getting available accounts: {e}')
+                return JSONResponse({'error': str(e)}, status_code=500)
+
         config = uvicorn.Config(app, port=14440, host='0.0.0.0', lifespan='on')
         server = uvicorn.Server(config)
         await server.serve()

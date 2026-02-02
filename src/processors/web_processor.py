@@ -19,6 +19,7 @@ import traceback
 from utils_files import (
     last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
     generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
+    extract_perf_chart_data, extract_pnl_chart_data, extract_daily_perf_chart_data,
     calculate_median_position_sizes, JSONResponse, get_temp_dir
 )
 from .file_watcher import FileWatcherManager
@@ -90,6 +91,9 @@ class WebProcessor:
 
         # File watching infrastructure - use FileWatcherManager
         self.file_watcher = FileWatcherManager()
+
+        # Graph data storage for Streamlit visualization (JSON-serializable)
+        self.graph_data = {}  # Structure: {session: {account_key: {perf: {...}, pnl: {...}, daily: {...}, timestamp: ...}}}
 
         self._init_accounts_by_strat()
 
@@ -512,6 +516,16 @@ class WebProcessor:
                             with open(filename, 'w') as f:
                                 f.write(html)
 
+                            # Extract and store graph data for Streamlit
+                            if session not in self.graph_data:
+                                self.graph_data[session] = {}
+                            self.graph_data[session][account_key] = {
+                                'perf': extract_perf_chart_data(perfcum),
+                                'pnl': extract_pnl_chart_data(pnlcum),
+                                'timestamp': datetime.now(UTC).isoformat()
+                            }
+                            LOGGER.info(f'Stored graph data for {session}-{account_key}')
+
                         elif day == 30 and not no_graph:
                             daily = last_aum['perf'].resample('1d').sum()
                             html = generate_daily_perf_chart(daily, session, account_key)
@@ -519,6 +533,18 @@ class WebProcessor:
                             filename = temp_dir / f'{session}_{account_key}_fig3.html'
                             with open(filename, 'w') as f:
                                 f.write(html)
+
+                            # Extract and store daily graph data for Streamlit
+                            if session in self.graph_data and account_key in self.graph_data[session]:
+                                self.graph_data[session][account_key]['daily'] = extract_daily_perf_chart_data(daily)
+                            else:
+                                if session not in self.graph_data:
+                                    self.graph_data[session] = {}
+                                self.graph_data[session][account_key] = {
+                                    'daily': extract_daily_perf_chart_data(daily),
+                                    'timestamp': datetime.now(UTC).isoformat()
+                                }
+                            LOGGER.info(f'Stored daily graph data for {session}-{account_key}')
                     if session not in self.aum:
                         self.aum[session] = {}
                     self.aum[session][account_key] = real_pnl_dict

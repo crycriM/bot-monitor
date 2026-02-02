@@ -8,6 +8,9 @@ import pandas as pd
 from pathlib import Path
 import streamlit as st
 from streamlit import session_state as ss
+import plotly.graph_objects as go
+from datetime import datetime
+import time
 
 from utils_files import get_temp_dir
 
@@ -339,6 +342,239 @@ def create_multiply_tab():
                 print(f'Error in execute_multiply: {e}')
 
 
+@st.cache_data(ttl=60)
+def fetch_available_accounts_for_graphs():
+    '''Fetch available sessions and accounts from API'''
+    try:
+        response = requests.get(f'{GATEWAY}/api/available-accounts', timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f'Failed to connect to backend API: {e}')
+        return None
+
+
+@st.cache_data(ttl=60)
+def fetch_graph_data(session: str, account_key: str):
+    '''Fetch graph data from API for specific session and account'''
+    try:
+        response = requests.get(
+            f'{GATEWAY}/api/graph-data/{session}/{account_key}',
+            timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+        if 'error' in data:
+            return None
+        return data
+    except Exception as e:
+        st.error(f'Error fetching graph data: {e}')
+        return None
+
+
+def create_perf_chart(timestamps, values, title):
+    '''Create cumulative performance chart with Plotly'''
+    df = pd.DataFrame({
+        'timestamp': pd.to_datetime(timestamps),
+        'value': values
+    })
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df['timestamp'],
+        y=df['value'],
+        mode='lines',
+        name='Cumulative Performance',
+        line=dict(color='#00d4ff', width=2),
+        hovertemplate='<b>%{x|%Y-%m-%d %H:%M}</b><br>Perf: %{y:.4f}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title='Date',
+        yaxis_title='Cumulative Performance',
+        hovermode='x unified',
+        template='plotly_dark',
+        paper_bgcolor='#0d0d0d',
+        plot_bgcolor='#1a1a1a',
+        font=dict(color='#ffffff', size=11),
+        margin=dict(l=50, r=50, t=80, b=50),
+        height=500
+    )
+
+    return fig
+
+
+def create_pnl_chart(timestamps, values, title):
+    '''Create cumulative PnL chart with Plotly'''
+    df = pd.DataFrame({
+        'timestamp': pd.to_datetime(timestamps),
+        'value': values
+    })
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df['timestamp'],
+        y=df['value'],
+        mode='lines',
+        name='Cumulative PnL',
+        line=dict(color='#00ff41', width=2),
+        hovertemplate='<b>%{x|%Y-%m-%d %H:%M}</b><br>PnL: %{y:.4f}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title='Date',
+        yaxis_title='Cumulative PnL',
+        hovermode='x unified',
+        template='plotly_dark',
+        paper_bgcolor='#0d0d0d',
+        plot_bgcolor='#1a1a1a',
+        font=dict(color='#ffffff', size=11),
+        margin=dict(l=50, r=50, t=80, b=50),
+        height=500
+    )
+
+    return fig
+
+
+def create_daily_perf_chart(timestamps, values, title):
+    '''Create daily performance bar chart with Plotly'''
+    df = pd.DataFrame({
+        'timestamp': pd.to_datetime(timestamps),
+        'value': values
+    })
+
+    colors = ['#00ff41' if v >= 0 else '#ff4444' for v in df['value']]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df['timestamp'],
+        y=df['value'],
+        name='Daily Performance',
+        marker=dict(color=colors),
+        hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Perf: %{y:.4f}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title='Date',
+        yaxis_title='Daily Performance',
+        hovermode='x unified',
+        template='plotly_dark',
+        paper_bgcolor='#0d0d0d',
+        plot_bgcolor='#1a1a1a',
+        font=dict(color='#ffffff', size=11),
+        margin=dict(l=50, r=50, t=80, b=50),
+        height=500,
+        showlegend=False
+    )
+
+    return fig
+
+
+def create_graph_tab():
+    '''Create the Graph tab with AUM and performance visualization'''
+    st.header('📈 AUM & Performance Charts')
+
+    # Fetch available accounts for graphs
+    accounts_data = fetch_available_accounts_for_graphs()
+
+    if accounts_data is None:
+        st.error('Unable to fetch account data from API')
+        return
+
+    sessions = accounts_data.get('sessions', [])
+
+    if not sessions:
+        st.info('No sessions available yet')
+        return
+
+    # Sidebar selectors for graphs
+    col1, col2 = st.columns(2)
+
+    with col1:
+        selected_session = st.selectbox('Session', sessions, key='graph_session')
+
+    with col2:
+        available_accounts = accounts_data.get('accounts', {}).get(selected_session, [])
+        if available_accounts:
+            selected_account = st.selectbox('Account', available_accounts, key='graph_account')
+        else:
+            st.warning('No accounts available for this session')
+            return
+
+    # Fetch graph data
+    graph_data = fetch_graph_data(selected_session, selected_account)
+
+    if graph_data is None or not graph_data.get('data'):
+        st.warning(f'No graph data available for {selected_session} - {selected_account}')
+        st.info('Graph data is generated when AUM files are processed')
+        return
+
+    data = graph_data.get('data', {})
+    timestamp = graph_data.get('timestamp', 'N/A')
+
+    # Display timestamp
+    st.caption(f'Last updated: {timestamp}')
+
+    # Create subtabs for different chart types
+    graph_tab1, graph_tab2, graph_tab3 = st.tabs(['📈 Performance', '💰 PnL', '📊 Daily'])
+
+    with graph_tab1:
+        if 'perf' in data:
+            perf_data = data['perf']
+            fig = create_perf_chart(
+                perf_data.get('timestamps', []),
+                perf_data.get('values', []),
+                f'Cumulative Performance - {selected_session}/{selected_account}'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info('Performance data not available')
+
+    with graph_tab2:
+        if 'pnl' in data:
+            pnl_data = data['pnl']
+            fig = create_pnl_chart(
+                pnl_data.get('timestamps', []),
+                pnl_data.get('values', []),
+                f'Cumulative PnL - {selected_session}/{selected_account}'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info('PnL data not available')
+
+    with graph_tab3:
+        if 'daily' in data:
+            daily_data = data['daily']
+            fig = create_daily_perf_chart(
+                daily_data.get('timestamps', []),
+                daily_data.get('values', []),
+                f'Daily Performance - {selected_session}/{selected_account}'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info('Daily performance data not available')
+
+    # Data metrics
+    st.divider()
+    st.subheader('Data Summary')
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+
+    with metric_col1:
+        perf_points = len(data.get('perf', {}).get('values', []))
+        st.metric('Perf Data Points', perf_points)
+
+    with metric_col2:
+        pnl_points = len(data.get('pnl', {}).get('values', []))
+        st.metric('PnL Data Points', pnl_points)
+
+    with metric_col3:
+        daily_points = len(data.get('daily', {}).get('values', []))
+        st.metric('Daily Data Points', daily_points)
+
+
 def main():
     '''Main application setup.'''
     # Page configuration
@@ -364,15 +600,18 @@ def main():
     # Create tabs
     # Create tabs (disabled multiply tab)
 
-    tab1, tab2 = st.tabs(['📊 PnL', '🔄 Matching'])
+    tab1, tab2, tab3 = st.tabs(['📊 PnL', '🔄 Matching', '📈 AUM & Performance'])
 
     with tab1:
         create_pnl_tab()
 
     with tab2:
         create_matching_tab()
+
+    with tab3:
+        create_graph_tab()
     #
-    # with tab3:
+    # with tab4:
     #     create_multiply_tab()
 
 

@@ -151,69 +151,110 @@ async def read_latent_file(latent_file):
 
     return df
 
+def extract_perf_chart_data(perfcum):
+    """Extract cumulative performance data as JSON-serializable dict"""
+    return {
+        'timestamps': [ts.isoformat() for ts in perfcum.index],
+        'values': [float(v) for v in perfcum.values]
+    }
+
+def extract_pnl_chart_data(pnlcum):
+    """Extract cumulative PnL data as JSON-serializable dict"""
+    return {
+        'timestamps': [ts.isoformat() for ts in pnlcum.index],
+        'values': [float(v) for v in pnlcum.values]
+    }
+
+def extract_daily_perf_chart_data(daily):
+    """Extract daily performance data as JSON-serializable dict"""
+    return {
+        'timestamps': [ts.isoformat() for ts in daily.index],
+        'values': [float(v) for v in daily.values]
+    }
+
 def generate_perf_chart(perfcum, session, account_key):
-    """Generate cumulative performance chart and return base64 encoded HTML"""
+    """Generate cumulative performance chart with dark background and return base64 encoded HTML"""
     import matplotlib.pyplot as plt
     import base64
     from io import BytesIO
 
-    fig, ax = plt.subplots()
-    ax.plot(perfcum.index, perfcum.values)
-    ax.set_xlabel('date')
-    ax.set_ylabel('Cum perf')
-    ax.set_title(f'{session}-{account_key}')
-    ax.grid()
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(12, 6))
+    ax.plot(perfcum.index, perfcum.values, color='#00d4ff', linewidth=2)
+    ax.set_xlabel('date', color='#ffffff', fontsize=11)
+    ax.set_ylabel('Cum perf', color='#ffffff', fontsize=11)
+    ax.set_title(f'{session}-{account_key}', color='#ffffff', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.2)
+    ax.set_facecolor('#0d0d0d')
     for tick in ax.get_xticklabels():
         tick.set_rotation(45)
-    ax.legend()
+        tick.set_color('#ffffff')
+    for tick in ax.get_yticklabels():
+        tick.set_color('#ffffff')
+    fig.tight_layout()
     tmpfile = BytesIO()
-    fig.savefig(tmpfile, format='png')
+    fig.savefig(tmpfile, format='png', facecolor='#1a1a1a')
+    tmpfile.seek(0)
     encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-    html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-    plt.close()
+    html = f'<html><body style="background-color:#1a1a1a; margin:0; padding:10px;"><img src=\'data:image/png;base64,{encoded}\' style="width:100%;"></body></html>'
+    plt.close(fig)
     return html
 
 def generate_pnl_chart(pnlcum, session, account_key):
-    """Generate cumulative PnL chart and return base64 encoded HTML"""
+    """Generate cumulative PnL chart with dark background and return base64 encoded HTML"""
     import matplotlib.pyplot as plt
     import base64
     from io import BytesIO
 
-    fig, ax = plt.subplots()
-    ax.plot(pnlcum.index, pnlcum.values)
-    ax.set_xlabel('date')
-    ax.set_ylabel('Cum pnl')
-    ax.set_title(f'{session}-{account_key}')
-    ax.grid()
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(12, 6))
+    ax.plot(pnlcum.index, pnlcum.values, color='#00ff41', linewidth=2)
+    ax.set_xlabel('date', color='#ffffff', fontsize=11)
+    ax.set_ylabel('Cum pnl', color='#ffffff', fontsize=11)
+    ax.set_title(f'{session}-{account_key}', color='#ffffff', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.2)
+    ax.set_facecolor('#0d0d0d')
     for tick in ax.get_xticklabels():
         tick.set_rotation(45)
-    ax.legend()
+        tick.set_color('#ffffff')
+    for tick in ax.get_yticklabels():
+        tick.set_color('#ffffff')
+    fig.tight_layout()
     tmpfile = BytesIO()
-    fig.savefig(tmpfile, format='png')
+    fig.savefig(tmpfile, format='png', facecolor='#1a1a1a')
+    tmpfile.seek(0)
     encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-    html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-    plt.close()
+    html = f'<html><body style="background-color:#1a1a1a; margin:0; padding:10px;"><img src=\'data:image/png;base64,{encoded}\' style="width:100%;"></body></html>'
+    plt.close(fig)
     return html
 
 def generate_daily_perf_chart(daily, session, account_key):
-    """Generate daily performance bar chart and return base64 encoded HTML"""
+    """Generate daily performance bar chart with dark background and return base64 encoded HTML"""
     import matplotlib.pyplot as plt
     import base64
     from io import BytesIO
 
-    fig, ax = plt.subplots()
-    ax.bar(x=daily.index, height=daily.values, color=daily.apply(lambda x:'red' if x<0 else 'green'))
-    ax.set_xlabel('date')
-    ax.set_ylabel('Daily perf')
-    ax.set_title(f'{session}-{account_key}')
-    ax.grid()
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(12, 6))
+    colors = ['#ff4444' if x < 0 else '#00ff41' for x in daily.values]
+    ax.bar(x=daily.index, height=daily.values, color=colors, edgecolor='#ffffff', linewidth=0.5)
+    ax.set_xlabel('date', color='#ffffff', fontsize=11)
+    ax.set_ylabel('Daily perf', color='#ffffff', fontsize=11)
+    ax.set_title(f'{session}-{account_key}', color='#ffffff', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.2, axis='y')
+    ax.set_facecolor('#0d0d0d')
     for tick in ax.get_xticklabels():
         tick.set_rotation(45)
+        tick.set_color('#ffffff')
+    for tick in ax.get_yticklabels():
+        tick.set_color('#ffffff')
+    fig.tight_layout()
     tmpfile = BytesIO()
-    fig.savefig(tmpfile, format='png')
+    fig.savefig(tmpfile, format='png', facecolor='#1a1a1a')
+    tmpfile.seek(0)
     encoded = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-    html = f'<html> <img src=\'data:image/png;base64,{encoded}\'></html>'
-    plt.close()
+    html = f'<html><body style="background-color:#1a1a1a; margin:0; padding:10px;"><img src=\'data:image/png;base64,{encoded}\' style="width:100%;"></body></html>'
+    plt.close(fig)
     return html
 
 def calculate_median_position_sizes(account_theo_pos, quotes):
