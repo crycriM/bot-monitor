@@ -23,6 +23,7 @@ pywebio = "^1.8"
 requests = "^2.31"
 watchdog = "^3.0"
 streamlit = "^1.53"
+plotly = "^5.17"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
