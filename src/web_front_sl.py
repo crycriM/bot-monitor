@@ -243,60 +243,69 @@ def create_matching_tab():
         # Exposure Summary
         st.subheader('Exposure Summary')
         summary_display = summary_df.dropna(how='all')
-        st.dataframe(summary_display, width=600, height=400)
+        st.dataframe(summary_display, use_container_width=True)
 
         st.divider()
 
         # Position counts
-        meaningful = main_df[main_df['theo_amount'] != 0][['token', 'theo_amount', 'real_amount']]
-        count_pos = (meaningful['real_amount'] > 0).sum()
-        count_neg = (meaningful['real_amount'] < 0).sum()
-        count_pos_th = (meaningful['theo_amount'] > 0).sum()
-        count_neg_th = (meaningful['theo_amount'] < 0).sum()
+        meaningful = main_df[main_df['theo_amount'] != 0][['token', 'theo_amount', 'real_amount']].copy()
+        if not meaningful.empty:
+            count_pos = (meaningful['real_amount'] > 0).sum()
+            count_neg = (meaningful['real_amount'] < 0).sum()
+            count_pos_th = (meaningful['theo_amount'] > 0).sum()
+            count_neg_th = (meaningful['theo_amount'] < 0).sum()
 
-        st.subheader('Theo Positions Matched')
-        tc = pd.DataFrame({
-            'Theo Positions': [count_pos_th, count_neg_th],
-            'Real Positions': [count_pos, count_neg],
-        }, index=['long#', 'short#'])
-        tc = tc.dropna(how='all')
-        st.dataframe(tc, width=600, height=200)
+            st.subheader('Theo Positions Matched')
+            tc = pd.DataFrame({
+                'Theo Positions': [count_pos_th, count_neg_th],
+                'Real Positions': [count_pos, count_neg],
+            }, index=['long#', 'short#'])
+            st.dataframe(tc, use_container_width=True)
 
-        st.divider()
+            st.divider()
 
         # Mismatched positions
-        mismatch = main_df[main_df['is_mismatch']][['token', 'theo_amount', 'real_amount']]
-        mismatch = mismatch.dropna(how='all')
-        if not mismatch.empty:
-            st.subheader('⚠️ Mismatched Positions')
-            st.dataframe(mismatch.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}), 
-                        width=600, height=400)
-            st.divider()
+        if 'is_mismatch' in main_df.columns:
+            mismatch = main_df[main_df['is_mismatch']][['token', 'theo_amount', 'real_amount']].copy()
+            if not mismatch.empty:
+                st.subheader('⚠️ Mismatched Positions')
+                st.dataframe(mismatch.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}),
+                            use_container_width=True)
+                st.divider()
 
         # Dust positions
-        dust = main_df[main_df['is_dust']][['token', 'real_amount']]
-        dust = dust.dropna(how='all')
-        if not dust.empty:
-            st.subheader('Dust Positions')
-            st.dataframe(dust.style.format({'real_amount': '{:.1f}'}), width=600, height=400)
-            st.divider()
+        if 'is_dust' in main_df.columns:
+            dust = main_df[main_df['is_dust']][['token', 'real_amount']].copy()
+            if not dust.empty:
+                st.subheader('Dust Positions')
+                st.dataframe(dust.style.format({'real_amount': '{:.1f}'}), use_container_width=True)
+                st.divider()
 
         # Load HTML figures from temp folder
         prefix = f'{session}_{account_key}'
         temp_dir = get_temp_dir()
+        figures_loaded = False
         for i in range(1, 4):
             figname = temp_dir / f'{prefix}_fig{i}.html'
             if figname.exists():
                 with open(figname, 'r') as figfile:
                     figure = figfile.read()
-                    st.components.v1.html(figure, height=480, scrolling=True)
+                    st.components.v1.html(figure, height=400, scrolling=True)
+                    figures_loaded = True
+
+        if figures_loaded:
+            st.divider()
 
         # All positions table
         st.subheader('All Positions')
-        positions_df = main_df[['token', 'theo_amount', 'real_amount']].dropna(how='all').reset_index(drop=True)
-        positions_df.index = positions_df.index + 1
-        st.dataframe(positions_df.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}),
-                    width=600, height=400)
+        if 'token' in main_df.columns:
+            positions_df = main_df[['token', 'theo_amount', 'real_amount']].copy()
+            positions_df = positions_df.reset_index(drop=True)
+            if not positions_df.empty:
+                st.dataframe(positions_df.style.format({'theo_amount': '{:.0f}', 'real_amount': '{:.0f}'}),
+                            use_container_width=True, height=400)
+            else:
+                st.info('No positions to display')
 
 
 def create_multiply_tab():
@@ -399,7 +408,7 @@ def create_perf_chart(timestamps, values, title):
         plot_bgcolor='#1a1a1a',
         font=dict(color='#ffffff', size=11),
         margin=dict(l=50, r=50, t=80, b=50),
-        height=500
+        height=350
     )
 
     return fig
@@ -432,7 +441,7 @@ def create_pnl_chart(timestamps, values, title):
         plot_bgcolor='#1a1a1a',
         font=dict(color='#ffffff', size=11),
         margin=dict(l=50, r=50, t=80, b=50),
-        height=500
+        height=350
     )
 
     return fig
@@ -466,7 +475,7 @@ def create_daily_perf_chart(timestamps, values, title):
         plot_bgcolor='#1a1a1a',
         font=dict(color='#ffffff', size=11),
         margin=dict(l=50, r=50, t=80, b=50),
-        height=500,
+        height=350,
         showlegend=False
     )
 
@@ -497,11 +506,13 @@ def create_graph_tab():
         selected_session = st.selectbox('Session', sessions, key='graph_session')
 
     with col2:
-        available_accounts = accounts_data.get('accounts', {}).get(selected_session, [])
-        if available_accounts:
-            selected_account = st.selectbox('Account', available_accounts, key='graph_account')
+        # Get account KEYS (not strategy names)
+        available_account_keys = accounts_data.get('graph_data_available', {}).get(selected_session, [])
+        if available_account_keys:
+            selected_account = st.selectbox('Account', available_account_keys, key='graph_account')
         else:
-            st.warning('No accounts available for this session')
+            st.warning('No accounts with graph data available for this session')
+            st.info('Graph data is generated when AUM files are processed')
             return
 
     # Fetch graph data
