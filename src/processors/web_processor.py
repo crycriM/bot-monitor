@@ -519,11 +519,13 @@ class WebProcessor:
                             # Extract and store graph data for Streamlit
                             if session not in self.graph_data:
                                 self.graph_data[session] = {}
-                            self.graph_data[session][account_key] = {
+                            account_graph_data = self.graph_data[session].get(account_key, {})
+                            account_graph_data.update({
                                 'perf': extract_perf_chart_data(perfcum),
                                 'pnl': extract_pnl_chart_data(pnlcum),
                                 'timestamp': datetime.now(UTC).isoformat()
-                            }
+                            })
+                            self.graph_data[session][account_key] = account_graph_data
                             LOGGER.info(f'Stored graph data for {session}-{account_key}')
 
                         elif day == 30 and not no_graph:
@@ -535,15 +537,14 @@ class WebProcessor:
                                 f.write(html)
 
                             # Extract and store daily graph data for Streamlit
-                            if session in self.graph_data and account_key in self.graph_data[session]:
-                                self.graph_data[session][account_key]['daily'] = extract_daily_perf_chart_data(daily)
-                            else:
-                                if session not in self.graph_data:
-                                    self.graph_data[session] = {}
-                                self.graph_data[session][account_key] = {
-                                    'daily': extract_daily_perf_chart_data(daily),
-                                    'timestamp': datetime.now(UTC).isoformat()
-                                }
+                            if session not in self.graph_data:
+                                self.graph_data[session] = {}
+                            account_graph_data = self.graph_data[session].get(account_key, {})
+                            account_graph_data.update({
+                                'daily': extract_daily_perf_chart_data(daily),
+                                'timestamp': datetime.now(UTC).isoformat()
+                            })
+                            self.graph_data[session][account_key] = account_graph_data
                             LOGGER.info(f'Stored daily graph data for {session}-{account_key}')
                     if session not in self.aum:
                         self.aum[session] = {}
