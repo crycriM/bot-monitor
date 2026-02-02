@@ -179,7 +179,7 @@ def generate_perf_chart(perfcum, session, account_key):
     from io import BytesIO
 
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(12, 6))
+    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(8, 5))
     ax.plot(perfcum.index, perfcum.values, color='#00d4ff', linewidth=2)
     ax.set_xlabel('date', color='#ffffff', fontsize=11)
     ax.set_ylabel('Cum perf', color='#ffffff', fontsize=11)
@@ -207,7 +207,7 @@ def generate_pnl_chart(pnlcum, session, account_key):
     from io import BytesIO
 
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(12, 6))
+    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(8, 5))
     ax.plot(pnlcum.index, pnlcum.values, color='#00ff41', linewidth=2)
     ax.set_xlabel('date', color='#ffffff', fontsize=11)
     ax.set_ylabel('Cum pnl', color='#ffffff', fontsize=11)
@@ -235,7 +235,7 @@ def generate_daily_perf_chart(daily, session, account_key):
     from io import BytesIO
 
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(12, 6))
+    fig, ax = plt.subplots(facecolor='#1a1a1a', figsize=(8, 5))
     colors = ['#ff4444' if x < 0 else '#00ff41' for x in daily.values]
     ax.bar(x=daily.index, height=daily.values, color=colors, edgecolor='#ffffff', linewidth=0.5)
     ax.set_xlabel('date', color='#ffffff', fontsize=11)
