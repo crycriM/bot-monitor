@@ -290,7 +290,7 @@ def create_matching_tab():
             if figname.exists():
                 with open(figname, 'r') as figfile:
                     figure = figfile.read()
-                    st.components.v1.html(figure, height=400, scrolling=True)
+                    st.components.v1.html(figure, height=320, scrolling=True)
                     figures_loaded = True
 
         if figures_loaded:
