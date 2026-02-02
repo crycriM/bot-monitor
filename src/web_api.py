@@ -6,6 +6,7 @@ import argparse
 import traceback
 import yaml
 from pathlib import Path
+import numpy as np
 try:
     from datetime import UTC
 except:
@@ -85,7 +86,8 @@ def runner(event, processor, pace):
             try:
                 # Check if report is a DataFrame
                 if hasattr(report, 'to_dict'):
-                    return JSONResponse(report.to_dict(orient='index'))
+                    clean_report = report.replace([np.nan, np.inf, -np.inf], None)
+                    return JSONResponse(clean_report.to_dict(orient='index'))
                 else:
                     # Already a dict or string
                     return JSONResponse(report if isinstance(report, dict) else {'message': report})
@@ -180,6 +182,9 @@ def runner(event, processor, pace):
 
     async def refresh_quotes():
         await processor.refresh_quotes()
+        # Recalculate matching with fresh prices for all sessions
+        for sess in processor.session_configs:
+            processor.do_matching(sess)
         # Recalculate median position sizes with fresh prices
         processor.median_position_sizes = calculate_median_position_sizes(
             processor.account_theo_pos, processor.quotes)
