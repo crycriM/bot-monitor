@@ -68,7 +68,7 @@ def multistrategy_matching_to_df(details_dict):
         main_df = pd.DataFrame.from_dict(details_dict, orient='index')
         main_df.reset_index(inplace=True)
         main_df.rename(columns={'index': 'token'}, inplace=True)
-        main_df = main_df[['token', 'theo', 'real', 'price', 'dust', 'is_mismatch']]
+        main_df = main_df.reindex(columns=['token', 'theo', 'real', 'price', 'dust', 'is_mismatch'], fill_value=np.nan)
         main_df = replace_na_with_nan(main_df)
 
         main_df['ref_price'] = main_df['price'].fillna(0.0)

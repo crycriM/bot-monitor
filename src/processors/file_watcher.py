@@ -28,13 +28,14 @@ SignalType = Enum('SignalType', [
 class FileChangeHandler(FileSystemEventHandler):
     """Handler for file system events that filters and routes to asyncio queue"""
 
-    def __init__(self, watched_files, queue, loop, debounce_seconds=2.0):
+    def __init__(self, watched_files, queue, loop, debounce_seconds=2.0, delay_seconds=600):
         super().__init__()
         self.watched_files = watched_files  # dict: file_path -> (session, entity, file_type)
         self.queue = queue
         self.loop = loop
         self.last_event_time = {}  # Debouncing: file_path -> datetime
         self.debounce_seconds = debounce_seconds
+        self.delay_seconds = delay_seconds
 
     def on_modified(self, event):
         if event.is_directory:
@@ -62,9 +63,13 @@ class FileChangeHandler(FileSystemEventHandler):
 
         # Push to asyncio queue
         asyncio.run_coroutine_threadsafe(
-            self.queue.put((file_type, session, entity, file_path)),
+            self._delayed_put(file_type, session, entity, file_path),
             self.loop
         )
+
+    async def _delayed_put(self, file_type, session, entity, file_path):
+        await asyncio.sleep(self.delay_seconds)
+        await self.queue.put((file_type, session, entity, file_path))
 
 
 class FileWatcherManager:
