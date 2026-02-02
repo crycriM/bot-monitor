@@ -2,7 +2,7 @@
 # Launch script for dashboard and/or backend (NiceGUI or Streamlit)
 
 # Python env
-source /home/ubuntu/.msenv/bin/activate
+source /home/ubuntu/.msenv311/bin/activate
 
 # Configuration
 EXE_DIR=/home/ubuntu/src/bot-monitor_new
