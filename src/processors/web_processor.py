@@ -362,11 +362,49 @@ class WebProcessor:
                 try:
                     content = await myfile.read()
                     params = json.loads(content)
+                    params['working_directory'] = Path(params['working_directory']).expanduser()
                     self.session_configs[session] = params
+                    LOGGER.info(f'Successfully reloaded config for {session}')
                 except Exception as e:
-                    LOGGER.error(f'Unreadable config file {config_file}')
+                    LOGGER.error(f'Unreadable config file {config_file}: {e}')
+                    LOGGER.error(traceback.format_exc())
+                    return
         else:
             LOGGER.warning(f'No config file to update for {session} with name {config_file}')
+            return
+
+        # Update matching config if it exists
+        if session in self.config_position_matching_files:
+            matching_config_file = self.config_position_matching_files[session]
+            if os.path.exists(matching_config_file):
+                LOGGER.info(f'Updating matching config for {session} from {matching_config_file}')
+                async with aiofiles.open(matching_config_file, 'r') as myfile:
+                    try:
+                        content = await myfile.read()
+                        params = json.loads(content)
+                        self.session_matching_configs[session] = params
+                        LOGGER.info(f'Successfully reloaded matching config for {session}')
+                    except Exception as e:
+                        LOGGER.error(f'Unreadable matching config file {matching_config_file}: {e}')
+                        LOGGER.error(traceback.format_exc())
+            else:
+                LOGGER.warning(f'No matching config file found for {session}')
+
+        # Reinitialize accounts by strategy with updated config
+        try:
+            self._init_accounts_by_strat()
+            LOGGER.info(f'Successfully updated accounts by strategy for {session}')
+        except Exception as e:
+            LOGGER.error(f'Error reinitializing accounts by strategy: {e}')
+            LOGGER.error(traceback.format_exc())
+
+        # Refresh account positions and perimeters with new config
+        try:
+            self.update_account_multi()
+            LOGGER.info(f'Successfully updated account positions for {session}')
+        except Exception as e:
+            LOGGER.error(f'Error updating account positions: {e}')
+            LOGGER.error(traceback.format_exc())
     async def update_aum(self, session):
         LOGGER.info('updating aum for %s', session)
         now = today_utc()

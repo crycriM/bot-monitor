@@ -138,7 +138,7 @@ def runner(event, processor, pace):
         await check(processor.check_all())
 
     async def send_alert(message):
-        if message is not None:
+        if message is not None and len(message) > 0:
             for error in message:
                 TGMessenger.send(error, 'CM')
             LOGGER.info(f'Sent {len(message)} msg')
