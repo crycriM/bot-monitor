@@ -16,10 +16,9 @@ except ImportError:
     UTC = timezone.utc
 import traceback
 
-from utils_files import (
+from ..utils_files import (
     last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
     generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
-    extract_perf_chart_data, extract_pnl_chart_data, extract_daily_perf_chart_data,
     calculate_median_position_sizes, JSONResponse, get_temp_dir
 )
 from .file_watcher import FileWatcherManager
@@ -223,7 +222,7 @@ class WebProcessor:
             columns={0: 'real', 1: 'theo', 2: 'price'})
 
         match = match.dropna(subset=['real', 'theo'], how='all')
-        match = match.drop(index=['equity', 'exposure'], errors='ignore')
+        match = match.drop(index=['equity', 'exposure', 'imbalance'], errors='ignore')
         match[['real', 'theo']] = match[['real', 'theo']].fillna(0)
         real_amnt = match['real'] * match['price']
         theo_amnt = match['theo'] * match['price']
@@ -318,7 +317,7 @@ class WebProcessor:
                 with open(f'output/web_quotes_{session}.txt', 'w') as myfile:
                     print(quotes, file=myfile)
             except Exception:
-                LOGGER.debug(f'Could not write output/web_quotes_{session}.txt')
+                LOGGER.debug(f'Could not write output/web_quotes_{session}.txt', exc_info=True)  # non-fatal, debug only
 
             for coin in self.perimeters.get(session, set()):
                 if coin not in quotes:
@@ -492,13 +491,13 @@ class WebProcessor:
                             real_pnl_dict['perfcum'].update({f'{day:03d}d': pc})
                             real_pnl_dict['drawdawn'].update({f'{day:03d}d': dd})
                             no_graph = False
-                        except:
+                        except Exception:
                             real_pnl_dict['pnlcum'].update({f'{day:03d}d': 0})
                             real_pnl_dict['vol'].update({f'{day:03d}d': 0})
                             real_pnl_dict['apr'].update({f'{day:03d}d': 0})
                             real_pnl_dict['perfcum'].update({f'{day:03d}d': 0})
                             real_pnl_dict['drawdawn'].update({f'{day:03d}d': 0})
-                            LOGGER.error(f'Error in aum data for strat {account_key} for day {day}')
+                            LOGGER.exception(f'Error in aum data for strat {account_key} for day {day}')
                             no_graph = True
 
                         if day == 180 and not no_graph:
@@ -569,9 +568,9 @@ class WebProcessor:
                 LOGGER.info('reading latent file for %s, %s', session, strategy_name)
                 latent_result = await read_latent_file(latent_file)
                 pnl_dict['sum_theo']['latent_theo'] = latent_result['latent_return'].iloc[-1]
-            except:
+            except Exception:
                 latent_result = pd.DataFrame()
-                LOGGER.error(f'Error in latent file {latent_file} for strat {strategy_name}')
+                LOGGER.exception(f'Error in latent file {latent_file} for strat {strategy_name}')
                 pnl_dict['sum_theo']['latent_theo'] = 0
             if session not in self.latent:
                 self.latent[session] = {strategy_name: latent_result}
@@ -606,12 +605,12 @@ class WebProcessor:
                                  'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
-            except:
+            except Exception:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
                                  'sum_theo': {f'{day:03d}d': 0 for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
-                LOGGER.error(f'Error in pnl file {pnl_file} for strat {strategy_name}')
+                LOGGER.exception(f'Error in pnl file {pnl_file} for strat {strategy_name}')
 
             try:
                 JSONResponse(pnl_dict)
@@ -625,9 +624,9 @@ class WebProcessor:
                 # with open(filename, 'w') as myfile:
                 #     j = json.dumps(self.pnl, indent=4, cls=NpEncoder)
                 #     print(j, file=myfile)
-            except:
-                LOGGER.error(f'Error in pnl dict for strat {session}:{strategy_name}')
-                self.pnl[session] = {strategy_name: {}}
+            except Exception:
+                LOGGER.exception(f'Error in pnl dict for strat {session}:{strategy_name}')
+                self.pnl[session] = {strategy_name: {} }
 
     async def update_summary(self, session, working_directory, strategy_name, strategy_param):
         try:

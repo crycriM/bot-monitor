@@ -28,11 +28,17 @@ class EdoProcessor:
             except json.JSONDecodeError as e:
                 LOGGER.error(f'Error reading killswitch file {killswitch_state_file}: {e}')
                 self.killswitch_state = {}
+            except Exception:
+                LOGGER.exception(f'Unexpected error reading killswitch file {killswitch_state_file}')
+                self.killswitch_state = {}
         else:
             self.killswitch_state = {}
-            with open(killswitch_state_file, 'w') as myfile:
-                j = json.dumps(self.killswitch_state, indent=4)
-                print(j, file=myfile)
+            try:
+                with open(killswitch_state_file, 'w') as myfile:
+                    j = json.dumps(self.killswitch_state, indent=4)
+                    print(j, file=myfile)
+            except Exception:
+                LOGGER.exception(f'Could not write initial killswitch file {killswitch_state_file}')
         self.refresh()
 
     def refresh(self):
@@ -49,6 +55,9 @@ class EdoProcessor:
                     self.killswitch = json.load(myfile)
             except json.JSONDecodeError as e:
                 LOGGER.error(f'Error reading killswitch file {killswitchfile}: {e}')
+                self.killswitch = {}
+            except Exception:
+                LOGGER.exception(f'Unexpected error reading killswitch file {killswitchfile}')
                 self.killswitch = {}
 
         if hearbeat_file.exists():
@@ -73,8 +82,15 @@ class EdoProcessor:
             strategy_directory = working_directory / strategy_name
             persistence_file = strategy_directory / strategy_param['persistence_file']
             if persistence_file.exists():
-                with open(persistence_file, 'r') as myfile:
-                    self.state = json.load(myfile)
+                try:
+                    with open(persistence_file, 'r') as myfile:
+                        self.state = json.load(myfile)
+                except json.JSONDecodeError:
+                    LOGGER.exception(f'Invalid JSON in persistence file {persistence_file}')
+                    self.state = {}
+                except Exception:
+                    LOGGER.exception(f'Error reading persistence file {persistence_file}')
+                    self.state = {}
             strat_summary = {}
 
             if strategy_param['type'] == 'pair':
@@ -146,9 +162,12 @@ class EdoProcessor:
         if need_save:
             killswitch_state_file = self.params['state_file']
             LOGGER.info(f'Saving killswitch state {self.killswitch_state} to {killswitch_state_file}')
-            with open(killswitch_state_file, 'w') as myfile:
-                j = json.dumps(self.killswitch_state, indent=4)
-                print(j, file=myfile)
+            try:
+                with open(killswitch_state_file, 'w') as myfile:
+                    j = json.dumps(self.killswitch_state, indent=4)
+                    print(j, file=myfile)
+            except Exception:
+                LOGGER.exception(f'Error saving killswitch state to {killswitch_state_file}')
 
     def get_pose(self, strategy):
         return self.summary.get(strategy, {})

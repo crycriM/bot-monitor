@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 from starlette.responses import Response
 from datafeed.utils_online import parse_pair, utc_ize, today_utc
+import logging
+LOGGER = logging.getLogger(__name__) 
 
 
 def get_temp_dir():
@@ -52,7 +54,8 @@ async def read_pnl_file(pnl_file):
         async with aiofiles.open(pnl_file, 'r') as myfile:
             content = await myfile.read()
         df = pd.read_csv(StringIO(content), sep=',', index_col=[0], converters={0: date_parser})
-    except:
+    except Exception:
+        LOGGER.exception(f'Error reading pnl file {pnl_file}')
         df = pd.DataFrame()
     return df
 
@@ -70,7 +73,8 @@ async def read_aum_file(aum_file, exchange):
                 df['aum'] += df['asset']
         else:
             df = pd.DataFrame()
-    except:
+    except Exception:
+        LOGGER.exception(f'Error reading aum file {aum_file}')
         df = pd.DataFrame()
 
     return df
@@ -101,6 +105,7 @@ def read_pos_file(pos_filename):
                         continue
                     pos_data[key] = float(value)
         except Exception as e:
+            LOGGER.exception(f'Error parsing pos file {pos_filename}')
             raise FileNotFoundError(f'Error parsing pos file {pos_filename}: {e}')
 
     return pos_data
@@ -133,8 +138,8 @@ def read_pos_file_histo(pos_filename):
                             key = key.strip("'").replace('USDCUSDC', 'USDC:USDC')
                         pos_data[key] = float(value)
                 position_history[date_parser(datetime_str)] = pos_data
-            except Exception as e:
-                print(f'Error parsing line at {datetime_str}: {e}')
+            except Exception:
+                LOGGER.exception(f'Error parsing line at {datetime_str}')
 
     position_history_df = pd.DataFrame.from_dict(position_history, orient='index').sort_index()
 
@@ -146,7 +151,8 @@ async def read_latent_file(latent_file):
             content = await myfile.read()
         df = pd.read_csv(StringIO(content), sep=';', header="infer", converters={0:date_parser})
         df.columns = ['ts', 'latent_return', 'latent_pnl']
-    except:
+    except Exception:
+        LOGGER.exception(f'Error reading latent file {latent_file}')
         df = pd.DataFrame()
 
     return df
