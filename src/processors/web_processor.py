@@ -18,7 +18,7 @@ import traceback
 
 from utils_files import (
     last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
-    generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
+    generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart, extract_daily_perf_chart_data, extract_perf_chart_data, extract_pnl_chart_data,
     calculate_median_position_sizes, JSONResponse, get_temp_dir
 )
 from .file_watcher import FileWatcherManager
