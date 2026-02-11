@@ -16,7 +16,7 @@ except ImportError:
     UTC = timezone.utc
 import traceback
 
-from ..utils_files import (
+from utils_files import (
     last_modif, read_pnl_file, read_aum_file, read_pos_file, read_latent_file,
     generate_perf_chart, generate_pnl_chart, generate_daily_perf_chart,
     calculate_median_position_sizes, JSONResponse, get_temp_dir
@@ -561,7 +561,7 @@ class WebProcessor:
 
         days = [1, 2, 7, 30, 90, 180]
         last_date = {day: now - timedelta(days=day) for day in days}
-        pnl_dict = {'mean_theo': {}, 'sum_theo': {}}
+        pnl_dict = {'mean_theo': {}, 'sum_theo': {}, 'duration': {}}
 
         if os.path.exists(latent_file):
             try:
@@ -588,12 +588,15 @@ class WebProcessor:
                     pnl['allocation'] = 10
                 pnl[label] = pnl[label].bfill()
                 last = {day: round(pnl.loc[pnl.index > last_date[day], 'pnl_theo'].mean() * 1e4, 0) for day in days}
-
+                def get_mean_duration(day):
+                    hours_in = pnl.loc[pnl.index > last_date[day], 'hours_in'].mean()
+                    return round(hours_in, 2) if not np.isnan(hours_in) else 0
                 def select_pnl(day):
                     val = pnl.loc[pnl.index > last_date[day], 'pnl_theo']
                     expo = pnl.loc[pnl.index > last_date[day], label]
                     return (val / expo).replace([np.inf, -np.inf], np.nan).sum(skipna=True).sum()
                 last_cum = {day: round(select_pnl(day), 4) for day in days}
+                last_duration = {day: get_mean_duration(day) for day in days}
                 for day, value in last.items():
                     if np.isnan(value) or np.isinf(value):
                         last[day] = 0
@@ -602,12 +605,14 @@ class WebProcessor:
                         last_cum[day] = 0
 
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': last[day] for day in days},
-                                 'sum_theo': {f'{day:03d}d': last_cum[day] for day in days}})
+                                 'sum_theo': {f'{day:03d}d': last_cum[day] for day in days},
+                                 'duration': {f'{day:03d}d': last_duration[day] for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
             except Exception:
                 pnl_dict.update({'mean_theo': {f'{day:03d}d': 0 for day in days},
-                                 'sum_theo': {f'{day:03d}d': 0 for day in days}})
+                                 'sum_theo': {f'{day:03d}d': 0 for day in days},
+                                 'duration': {f'{day:03d}d': 0 for day in days}})
                 pnl_dict['mean_theo']['strategy_type'] = strategy_type
                 pnl_dict['sum_theo']['strategy_type'] = strategy_type
                 LOGGER.exception(f'Error in pnl file {pnl_file} for strat {strategy_name}')
