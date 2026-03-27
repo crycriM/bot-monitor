@@ -24,7 +24,7 @@ from utils_files import (
 from .file_watcher import FileWatcherManager
 from shared_utils.online import parse_pair, today_utc
 from datafeed.broker_handler import BrokerHandler
-from trading_bot.web_broker import WebSpreaderBroker
+from trading_bot.broker.web_broker import WebSpreaderBroker
 
 LOGGER = logging.getLogger(__name__)
 
