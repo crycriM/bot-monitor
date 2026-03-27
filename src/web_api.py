@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from utils_files import calculate_median_position_sizes, JSONResponse
 from processors.file_watcher import SignalType
 from processors.web_processor import WebProcessor
-from trading_bot.web_broker import WebSpreaderBroker
+from trading_bot.broker.web_broker import WebSpreaderBroker
 from shared_utils.bot_reporting import TGMessenger
 
 app = None

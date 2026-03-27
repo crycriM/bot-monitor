@@ -25,7 +25,7 @@ import uvicorn
 from data_analyzer.aggregate_strategies import aggregate_theo_positions
 from datafeed.utils_online import NpEncoder, parse_pair, utc_ize, today_utc
 from datafeed.broker_handler import BrokerHandler
-from web_broker import WebSpreaderBroker
+from trading_bot.broker.web_broker import WebSpreaderBroker
 from reporting.bot_reporting import TGMessenger
 from data_analyzer.position_comparator import compare_positions
 from utils_files import get_temp_dir
