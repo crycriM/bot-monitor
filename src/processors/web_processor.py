@@ -947,9 +947,10 @@ class WebProcessor:
                             except (ValueError, TypeError):
                                 rel_delta = 0.0
 
-                            message += [f'{account_key}@{session}: Position mismatch for {coin} - Real: {real_pos:.2f},'
-                                        f'Theo: {theo_pos:.2f}, Rel delta: {rel_delta:.2%}']
-
+                            # Only report mismatch if relative delta is >= 10%
+                            if abs(rel_delta) >= 0.10:
+                                message += [f'{account_key}@{session}: Position mismatch for {coin} - Real: {real_pos:.2f},'
+                                            f'Theo: {theo_pos:.2f}, Rel delta: {rel_delta:.2%}']
 
         # Check for positions that should exist but don't
                     theo_only = significant_theo.difference(significant_current)
