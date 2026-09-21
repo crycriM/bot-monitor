@@ -17,7 +17,6 @@ from pywebio.session import set_env
 from utils_files import get_temp_dir
 
 GATEWAY = 'http://localhost:14440'
-#GATEWAY = 'http://54.249.107.88:14440'
 
 
 from pywebio.output import put_datatable, JSFunction, output_register_callback

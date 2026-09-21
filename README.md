@@ -235,7 +235,7 @@ streamlit run src/web_front_sl.py --logger.level=debug -- --config config/web_pr
 
 ## Comparison with NiceGUI Version
 
-If you were previously using [README_web_front_new.md](README_web_front_new.md) (NiceGUI version):
+If you were previously using the legacy NiceGUI version, see `src/web_front_new.py`:
 
 **Advantages of Streamlit:**
 - Simpler, more lightweight

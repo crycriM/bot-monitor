@@ -12,9 +12,6 @@ bot-monitor/
 │   └── web_front_new.py      ← New (NiceGUI) - 482 lines ✨
 ├── test_web_front_new.py     ← Test suite (all passing ✅)
 ├── launch_dashboard.sh        ← Quick launch script
-├── README_web_front_new.md   ← User documentation
-├── MIGRATION.md              ← Migration comparison
-├── IMPLEMENTATION_SUMMARY.md ← This summary
 └── pyproject.toml            ← Updated with nicegui dependency
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -157,16 +154,8 @@ Design Principles:
 📚 DOCUMENTATION
 ═══════════════════════════════════════════════════════════════════════════════
 
-Files Created:
-  1. README_web_front_new.md   - Complete user guide
-  2. MIGRATION.md              - Side-by-side comparison
-  3. IMPLEMENTATION_SUMMARY.md - Detailed summary
-  4. This file                 - Quick reference
-
-Quick Links:
-  • User Guide: README_web_front_new.md
-  • Migration Details: MIGRATION.md
-  • Full Summary: IMPLEMENTATION_SUMMARY.md
+This file is the public quick reference. Legacy implementation notes are
+kept outside the public tree.
 
 ═══════════════════════════════════════════════════════════════════════════════
 🎯 SUCCESS CRITERIA - ALL MET
@@ -207,6 +196,6 @@ Framework: NiceGUI 1.4+
 Python: 3.10+
 Status: Production Ready ✅
 
-Questions? See README_web_front_new.md for detailed documentation.
+Questions? See README.md for the public documentation.
 
 ═══════════════════════════════════════════════════════════════════════════════
